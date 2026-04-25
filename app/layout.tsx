@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import type { Viewport } from 'next'
+
+// This forces mobile phones to render the site exactly 1280px wide
+export const viewport: Viewport = {
+  width: 1280,
+  initialScale: 0.3,
+  maximumScale: 5,
+  userScalable: true,
+}
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

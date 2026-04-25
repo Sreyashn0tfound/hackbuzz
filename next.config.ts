@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  reactStrictMode: false, // Prevents 3D canvas double-rendering glitches
 };
 
 export default nextConfig;
