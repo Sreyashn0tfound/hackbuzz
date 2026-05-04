@@ -12,13 +12,19 @@ import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { initializeApp, getApps } from 'firebase/app'
 
 export default function AdminDashboard() {
-    // Question Vault State
-    const [qText, setQText] = useState('')
+    // NEW: Detailed Question Vault State 👇
+    const [qForm, setQForm] = useState({
+        title: '',
+        description: '',
+        constraints: '',
+        output: ''
+    })
     const [qTrack, setQTrack] = useState('Urban Friction')
+
     const [teams, setTeams] = useState<any[]>([])
     const [sosTickets, setSosTickets] = useState<any[]>([])
 
-    // NEW SYSTEM CONFIG STATES 👇
+    // SYSTEM CONFIG STATES
     const [eventStarted, setEventStarted] = useState(false)
     const [rouletteUnlocked, setRouletteUnlocked] = useState(false)
 
@@ -77,7 +83,7 @@ export default function AdminDashboard() {
         await updateDoc(doc(db, "sos_tickets", id), { status: 'resolved' })
     }
 
-    // NEW MANUAL TOGGLES 👇
+    // MANUAL TOGGLES
     const toggleEventStatus = async () => {
         const newStatus = !eventStarted;
         const msg = newStatus ?
@@ -151,16 +157,17 @@ export default function AdminDashboard() {
         }
     }
 
+    // UPDATED: Now saves the structured object instead of a string
     const handleAddQuestion = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
-            // This creates the document if it doesn't exist, and pushes the question into the array!
             await setDoc(doc(db, "track_questions", qTrack), {
-                pool: arrayUnion(qText)
+                pool: arrayUnion(qForm)
             }, { merge: true })
 
-            setQText('')
-            alert("Question locked into the vault for " + qTrack + "!")
+            // Reset the form
+            setQForm({ title: '', description: '', constraints: '', output: '' })
+            alert(`Structured Objective locked into the vault for ${qTrack}!`)
         } catch (err) {
             console.error(err)
             alert("Failed to add question.")
@@ -189,7 +196,6 @@ export default function AdminDashboard() {
                         <p className="text-xs font-bold text-stone-400 mt-2">{metrics.pendingTeams} teams pending payment</p>
                     </div>
 
-                    {/* NEW MANUAL MASTER SWITCHES 👇 */}
                     <div className={`md:col-span-2 p-6 rounded-3xl border flex flex-col justify-center gap-4 ${eventStarted ? 'bg-green-50 border-green-200' : 'bg-stone-50 border-stone-200'}`}>
                         <div className="flex items-center justify-between">
                             <div>
@@ -268,7 +274,10 @@ export default function AdminDashboard() {
                                         <tr key={team.id}>
                                             <td className="p-4 font-black">{team.teamName}</td>
                                             <td className="p-4"><span className="px-2 py-1 bg-stone-100 rounded text-xs font-bold uppercase">{team.track}</span></td>
-                                            <td className="p-4 text-sm font-medium text-stone-600 max-w-[200px] truncate">{team.assignedQuestion || "Not Spun Yet"}</td>
+                                            <td className="p-4 text-sm font-medium text-stone-600 max-w-[200px] truncate">
+                                                {/* CRITICAL FIX: Safe render if assignedQuestion is an object */}
+                                                {team.assignedQuestion ? (team.assignedQuestion.title || team.assignedQuestion) : "Not Spun Yet"}
+                                            </td>
                                             <td className="p-4 text-right">
                                                 <button onClick={() => handleTransferCaptain(team.id)} className="px-3 py-1 bg-stone-900 text-yellow-400 font-bold text-[10px] uppercase rounded hover:bg-stone-800 transition-colors">Transfer Captain</button>
                                             </td>
@@ -304,12 +313,19 @@ export default function AdminDashboard() {
                             </form>
                         </div>
 
-                        {/* QUESTION VAULT */}
+                        {/* DETAILED QUESTION VAULT 👇 */}
                         <div className="bg-white border shadow-sm rounded-3xl p-6 relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-1.5 bg-emerald-500" />
-                            <h3 className="font-black text-xl uppercase mb-4">Question Vault</h3>
+                            <h3 className="font-black text-xl uppercase mb-4">Objective Vault</h3>
                             <form onSubmit={handleAddQuestion} className="space-y-4">
-                                <textarea required value={qText} onChange={(e) => setQText(e.target.value)} placeholder="Type the problem statement here..." className="w-full p-3 bg-stone-50 border rounded-xl text-sm font-bold outline-none focus:border-emerald-400 h-24 resize-none" />
+                                <input required value={qForm.title} onChange={(e) => setQForm({ ...qForm, title: e.target.value })} placeholder="Title (e.g. The invisible queue)" className="w-full p-3 bg-stone-50 border rounded-xl text-sm font-bold outline-none focus:border-emerald-400" />
+
+                                <textarea required value={qForm.description} onChange={(e) => setQForm({ ...qForm, description: e.target.value })} placeholder="Full Problem Description..." className="w-full p-3 bg-stone-50 border rounded-xl text-sm font-medium outline-none focus:border-emerald-400 h-24 resize-none" />
+
+                                <textarea required value={qForm.constraints} onChange={(e) => setQForm({ ...qForm, constraints: e.target.value })} placeholder="Constraints (e.g. No QR Codes)" className="w-full p-3 bg-stone-50 border rounded-xl text-sm font-medium outline-none focus:border-emerald-400 h-20 resize-none" />
+
+                                <textarea required value={qForm.output} onChange={(e) => setQForm({ ...qForm, output: e.target.value })} placeholder="Expected MVP Scope / Output" className="w-full p-3 bg-stone-50 border rounded-xl text-sm font-medium outline-none focus:border-emerald-400 h-20 resize-none" />
+
                                 <select value={qTrack} onChange={(e) => setQTrack(e.target.value)} className="w-full p-3 bg-stone-50 border rounded-xl text-sm font-bold outline-none focus:border-emerald-400">
                                     <option value="Urban Friction">Urban Friction</option>
                                     <option value="Learning Under Constraint">Learning Under Constraint</option>
@@ -319,7 +335,7 @@ export default function AdminDashboard() {
                                     <option value="Digital Overload">Digital Overload</option>
                                 </select>
                                 <button type="submit" className="w-full py-3 bg-stone-900 text-white font-black uppercase rounded-xl hover:bg-stone-800 transition-colors flex justify-center items-center gap-2">
-                                    <PlusCircle className="w-5 h-5" /> Inject Problem
+                                    <PlusCircle className="w-5 h-5" /> Inject Objective
                                 </button>
                             </form>
                         </div>

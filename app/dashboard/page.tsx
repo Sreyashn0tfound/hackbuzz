@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Hexagon, ArrowLeft, ArrowRight, Terminal, Users, Cpu, Clock, Rocket, Bell, Code, Link as LinkIcon, CheckCircle2, Headset, Send, Crown, AlertCircle, XCircle, FileText, Layers, Bot, Video, Dices, Lock, Building2, GraduationCap, HeartPulse, Wallet, Network, MonitorOff, Unlock, Activity } from 'lucide-react'
+import { Hexagon, ArrowLeft, ArrowRight, Terminal, Users, Cpu, Clock, Rocket, Bell, Code, Link as LinkIcon, CheckCircle2, Headset, Send, Crown, AlertCircle, XCircle, FileText, Layers, Bot, Video, Dices, Lock, Building2, GraduationCap, HeartPulse, Wallet, Network, MonitorOff, Unlock, Activity, QrCode } from 'lucide-react'
 import Link from 'next/link'
 import { auth, db } from '../../lib/firebase'
 import { doc, getDoc, updateDoc, onSnapshot, addDoc, collection, arrayRemove } from 'firebase/firestore'
@@ -58,13 +58,9 @@ export default function HackerDashboard() {
     const [isSpinning, setIsSpinning] = useState(false)
     const [currentSpinText, setCurrentSpinText] = useState("???")
 
-    // Admin Master Control States (Linked to your new Admin panel)
+    // Admin Master Control States
     const [submissionsUnlocked, setSubmissionsUnlocked] = useState(false)
     const [rouletteUnlocked, setRouletteUnlocked] = useState(false)
-
-    // Resubmit UTR States
-    const [newUtr, setNewUtr] = useState('')
-    const [isSubmittingUtr, setIsSubmittingUtr] = useState(false)
 
     // FETCH DATA FROM FIREBASE ON LOAD
     useEffect(() => {
@@ -88,10 +84,7 @@ export default function HackerDashboard() {
                         const teamDoc = await getDoc(doc(db, "teams", code))
                         if (teamDoc.exists()) {
                             setTeamInfo(teamDoc.data())
-                            // If they already submitted previously, reflect that
-                            if (teamDoc.data().isSubmitted) {
-                                setIsSubmitted(true)
-                            }
+                            if (teamDoc.data().isSubmitted) setIsSubmitted(true)
                         }
                     }
                 }
@@ -109,7 +102,7 @@ export default function HackerDashboard() {
         const unsubConfig = onSnapshot(doc(db, "config", "system"), (snap) => {
             if (snap.exists()) {
                 const data = snap.data()
-                setSubmissionsUnlocked(data.eventStarted || false) // eventStarted is the submission unlock
+                setSubmissionsUnlocked(data.eventStarted || false)
                 setRouletteUnlocked(data.rouletteUnlocked || false)
             }
         })
@@ -121,7 +114,6 @@ export default function HackerDashboard() {
         router.push('/')
     }
 
-    // UPDATED: Now actually writes the project to Firebase
     const handleSubmission = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!confirm("Are you sure? You cannot edit this once submitted.")) return
@@ -146,7 +138,7 @@ export default function HackerDashboard() {
         }
     }
 
-    // UPDATED: Now actually sends the SOS to the Admin Dashboard
+    // UPDATED SOS PING: Properly structures data for the Admin panel
     const handleSosSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
@@ -163,32 +155,11 @@ export default function HackerDashboard() {
             setTimeout(() => setIsSosSent(false), 5000)
         } catch (error) {
             console.error("SOS failed:", error)
-            alert("Failed to send beacon.")
+            alert("Failed to send beacon. Check your connection.")
         }
     }
 
-    // RESUBMIT UTR LOGIC
-    const handleUtrResubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-        if (!newUtr.trim()) return
-        setIsSubmittingUtr(true)
-        try {
-            await updateDoc(doc(db, "teams", teamCode), {
-                transactionId: newUtr,
-                status: 'pending'
-            })
-            // Update local state to immediately show pending status
-            setTeamInfo((prev: any) => ({ ...prev, status: 'pending', transactionId: newUtr }))
-            setNewUtr('')
-            alert("New UTR submitted successfully! Awaiting verification.")
-        } catch (error) {
-            console.error("UTR resubmit failed:", error)
-            alert("Failed to resubmit UTR. Please try again.")
-        }
-        setIsSubmittingUtr(false)
-    }
-
-    // THE ROULETTE SPIN LOGIC
+    // THE ROULETTE SPIN LOGIC (UPGRADED FOR OBJECTS)
     const handleSpinWheel = async () => {
         if (!isLeader) return alert("Only the Captain can draw.")
         setIsSpinning(true)
@@ -206,14 +177,17 @@ export default function HackerDashboard() {
 
             let counter = 0
             const spinInterval = setInterval(() => {
-                setCurrentSpinText(livePool[counter++ % livePool.length])
+                const item = livePool[counter++ % livePool.length]
+                // Fallback to string if old data, otherwise use the new title
+                setCurrentSpinText(typeof item === 'string' ? item : item.title || "???")
             }, 80)
 
             setTimeout(async () => {
                 clearInterval(spinInterval)
 
+                // Pick the final question object
                 const finalQuestion = livePool[Math.floor(Math.random() * livePool.length)]
-                setCurrentSpinText(finalQuestion)
+                setCurrentSpinText(typeof finalQuestion === 'string' ? finalQuestion : finalQuestion.title)
 
                 try {
                     await updateDoc(doc(db, "teams", teamCode), { assignedQuestion: finalQuestion })
@@ -262,6 +236,10 @@ export default function HackerDashboard() {
     const isLeader = userUid === teamInfo.leaderUid
     const emptySlots = Array(Math.max(0, 4 - (teamInfo.members?.length || 0))).fill("Waiting...")
 
+    // Generate QR Data specifically for Admin check-in scanner
+    const qrPayload = encodeURIComponent(JSON.stringify({ code: teamCode, team: teamInfo.teamName, track: teamInfo.track }))
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${qrPayload}&color=1c1917&bgcolor=ffffff&qzone=1`
+
     return (
         <main className="relative min-h-screen text-stone-900 py-12 px-6 overflow-hidden">
             <LiquidAuraBackground />
@@ -285,47 +263,8 @@ export default function HackerDashboard() {
                         <div className="p-3 bg-orange-100 rounded-2xl"><AlertCircle className="w-8 h-8 text-orange-600" /></div>
                         <div>
                             <h3 className="font-black text-stone-900 uppercase text-lg">Verification Pending</h3>
-                            <p className="text-stone-600 font-medium text-sm">Your UTR is currently under manual review by the Hive Admins. You can still access the dashboard.</p>
+                            <p className="text-stone-600 font-medium text-sm">Your squad is under review by the Hive Admins.</p>
                         </div>
-                    </motion.div>
-                )}
-                {teamInfo.status === 'approved' && (
-                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8 p-6 bg-green-50 border border-green-200 rounded-3xl flex items-center gap-4 shadow-sm">
-                        <div className="p-3 bg-green-100 rounded-2xl"><CheckCircle2 className="w-8 h-8 text-green-600" /></div>
-                        <div>
-                            <h3 className="font-black text-stone-900 uppercase text-lg">Team Approved</h3>
-                            <p className="text-stone-600 font-medium text-sm">Your payment is verified. Welcome to the main event.</p>
-                        </div>
-                    </motion.div>
-                )}
-                {teamInfo.status === 'rejected' && (
-                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8 p-6 bg-red-50 border border-red-200 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
-                        <div className="flex items-center gap-4">
-                            <div className="p-3 bg-red-100 rounded-2xl"><XCircle className="w-8 h-8 text-red-600" /></div>
-                            <div>
-                                <h3 className="font-black text-stone-900 uppercase text-lg">Verification Failed</h3>
-                                <p className="text-stone-600 font-medium text-sm">Your UTR could not be verified. Please submit a correct UTR below.</p>
-                            </div>
-                        </div>
-                        {isLeader ? (
-                            <form onSubmit={handleUtrResubmit} className="flex items-center gap-2 w-full sm:w-auto">
-                                <input 
-                                    type="text" 
-                                    required 
-                                    value={newUtr} 
-                                    onChange={(e) => setNewUtr(e.target.value)} 
-                                    placeholder="Enter new UTR..." 
-                                    className="px-4 py-3 bg-white border border-red-200 rounded-xl outline-none focus:border-red-400 text-sm font-medium w-full sm:w-48 transition-colors"
-                                />
-                                <button type="submit" disabled={isSubmittingUtr} className="px-5 py-3 bg-red-600 text-white font-bold text-sm rounded-xl hover:bg-red-700 transition-colors disabled:opacity-50 whitespace-nowrap">
-                                    {isSubmittingUtr ? '...' : 'Submit Correct UTR'}
-                                </button>
-                            </form>
-                        ) : (
-                            <div className="px-4 py-3 bg-white border border-red-200 rounded-xl text-sm font-medium text-stone-500">
-                                Ask your Captain to resubmit the UTR.
-                            </div>
-                        )}
                     </motion.div>
                 )}
 
@@ -340,7 +279,7 @@ export default function HackerDashboard() {
                     {/* LEFT COLUMN (Timeline, Comms & SOS) */}
                     <div className="lg:col-span-1 space-y-6">
 
-                        {/* EVENT STATUS CARD (Replaced Timer) */}
+                        {/* EVENT STATUS CARD */}
                         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="bg-white/60 backdrop-blur-2xl border border-white/50 shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-[2rem] p-8 relative overflow-hidden">
                             <div className={`absolute top-0 left-0 w-full h-1.5 ${submissionsUnlocked ? 'bg-green-500' : 'bg-stone-900'}`} />
                             <div className="flex items-center gap-3 mb-6">
@@ -373,12 +312,8 @@ export default function HackerDashboard() {
 
                             <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                                 <div className="border-l-2 border-yellow-400 pl-4 py-1">
-                                    <span className="text-xs font-bold text-stone-400 uppercase">Just Now</span>
-                                    <p className="font-medium text-stone-900 text-sm">Welcome to the Dashboard! Your database is officially connected.</p>
-                                </div>
-                                <div className="border-l-2 border-stone-200 pl-4 py-1">
                                     <span className="text-xs font-bold text-stone-400 uppercase">System</span>
-                                    <p className="font-medium text-stone-500 text-sm">Mentor schedule will be posted on May 8th at 10:00 AM.</p>
+                                    <p className="font-medium text-stone-900 text-sm">Keep this dashboard open for roulette spins and final submission links.</p>
                                 </div>
                             </div>
                         </motion.div>
@@ -395,7 +330,7 @@ export default function HackerDashboard() {
                                 <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-6 bg-green-50/50 rounded-2xl border border-green-100">
                                     <CheckCircle2 className="w-10 h-10 text-green-500 mx-auto mb-2" />
                                     <p className="font-bold text-stone-900 text-sm">Beacon Transmitted.</p>
-                                    <p className="text-stone-500 text-xs mt-1">An organizer is on the way.</p>
+                                    <p className="text-stone-500 text-xs mt-1">An organizer is looking at it.</p>
                                 </motion.div>
                             ) : (
                                 <form onSubmit={handleSosSubmit} className="space-y-4">
@@ -430,11 +365,11 @@ export default function HackerDashboard() {
                     {/* RIGHT COLUMN (Roster, Gacha & Submission) */}
                     <div className="lg:col-span-2 space-y-6">
 
-                        {/* TEAM ROSTER */}
+                        {/* TEAM ROSTER & QR NODE */}
                         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="bg-white/60 backdrop-blur-2xl border border-white/50 shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-[2rem] p-8 relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-yellow-300 to-amber-500" />
 
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
                                 <div className="flex items-center gap-4">
                                     <div className="p-4 bg-stone-900 rounded-2xl"><Terminal className="w-8 h-8 text-yellow-400" /></div>
                                     <div>
@@ -445,10 +380,15 @@ export default function HackerDashboard() {
                                     </div>
                                 </div>
 
-                                <div className="text-right">
-                                    <span className="block text-xs font-bold text-stone-500 uppercase tracking-wider mb-1">Invite Code</span>
-                                    <div className="inline-block px-4 py-2 bg-white border border-stone-200 rounded-xl">
-                                        <span className="font-black text-stone-900 tracking-[0.2em]">{teamCode}</span>
+                                {/* NEW QR CODE ID BLOCK FOR DAY 1 SCANNING */}
+                                <div className="flex items-center gap-4 bg-white p-3 rounded-2xl border border-stone-200 shadow-sm w-full md:w-auto">
+                                    <div className="shrink-0 p-1 bg-stone-100 rounded-xl">
+                                        <img src={qrUrl} alt="Team QR" className="w-16 h-16 rounded-lg mix-blend-multiply" />
+                                    </div>
+                                    <div>
+                                        <span className="block text-[10px] font-black text-stone-400 uppercase tracking-wider mb-0.5">Invite / Access Code</span>
+                                        <span className="font-black text-stone-900 text-xl tracking-[0.1em]">{teamCode}</span>
+                                        <span className="block text-[10px] font-bold text-stone-500 mt-1 flex items-center gap-1"><QrCode className="w-3 h-3" /> Scan at Registration</span>
                                     </div>
                                 </div>
                             </div>
@@ -475,7 +415,7 @@ export default function HackerDashboard() {
                             </div>
                         </motion.div>
 
-                        {/* THE GACHA / ROULETTE CARD */}
+                        {/* DETAILED GACHA / ROULETTE CARD */}
                         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }} className="bg-white/60 backdrop-blur-2xl border border-white/50 shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-[2rem] p-8 relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-purple-400 to-indigo-500" />
 
@@ -485,16 +425,39 @@ export default function HackerDashboard() {
                             </div>
 
                             {teamInfo.assignedQuestion ? (
-                                // STATE: ALREADY DRAWN
-                                <div className="p-6 bg-gradient-to-br from-yellow-300 via-amber-400 to-amber-500 rounded-2xl border border-yellow-200 shadow-[inset_0_2px_10px_rgba(255,255,255,0.5),_0_10px_20px_rgba(217,119,6,0.3)] relative overflow-hidden">
-                                    <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/40 to-transparent rounded-t-2xl pointer-events-none" />
-                                    <div className="flex items-center gap-2 mb-3 relative z-10">
-                                        <Lock className="w-4 h-4 text-stone-900/60" />
-                                        <span className="font-black text-stone-900/60 uppercase text-xs tracking-wider">Locked Objective</span>
+                                // STATE: ALREADY DRAWN (DETAILED VIEW)
+                                <div className="bg-gradient-to-br from-yellow-300 via-amber-400 to-amber-500 rounded-2xl border border-yellow-200 shadow-[inset_0_2px_10px_rgba(255,255,255,0.5),_0_10px_20px_rgba(217,119,6,0.3)] relative overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-full h-[150px] bg-gradient-to-b from-white/40 to-transparent pointer-events-none" />
+
+                                    <div className="p-6 relative z-10 border-b border-white/20">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <Lock className="w-4 h-4 text-stone-900/60" />
+                                            <span className="font-black text-stone-900/60 uppercase text-xs tracking-wider">Locked Objective</span>
+                                        </div>
+                                        <h4 className="text-2xl font-black text-stone-900 drop-shadow-sm leading-tight">
+                                            {typeof teamInfo.assignedQuestion === 'string' ? teamInfo.assignedQuestion : teamInfo.assignedQuestion.title}
+                                        </h4>
                                     </div>
-                                    <p className="text-xl md:text-2xl font-black text-stone-900 relative z-10 leading-tight drop-shadow-sm">
-                                        {teamInfo.assignedQuestion}
-                                    </p>
+
+                                    {/* EXPANDED DETAILS (Only if it's an object) */}
+                                    {typeof teamInfo.assignedQuestion === 'object' && (
+                                        <div className="p-6 bg-white/90 backdrop-blur-sm space-y-4">
+                                            <div className="space-y-1">
+                                                <h5 className="text-[10px] font-black text-stone-400 uppercase tracking-widest">The Problem</h5>
+                                                <p className="text-sm font-medium text-stone-800 leading-relaxed">{teamInfo.assignedQuestion.description}</p>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <div className="bg-stone-50 p-4 rounded-xl border border-stone-200">
+                                                    <h5 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Constraints</h5>
+                                                    <p className="text-xs font-bold text-stone-600 whitespace-pre-wrap">{teamInfo.assignedQuestion.constraints}</p>
+                                                </div>
+                                                <div className="bg-stone-50 p-4 rounded-xl border border-stone-200">
+                                                    <h5 className="text-[10px] font-black text-green-500 uppercase tracking-widest mb-1">Expected Output</h5>
+                                                    <p className="text-xs font-bold text-stone-600 whitespace-pre-wrap">{teamInfo.assignedQuestion.output}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ) : !rouletteUnlocked ? (
                                 // STATE: LOCKED BY ADMIN

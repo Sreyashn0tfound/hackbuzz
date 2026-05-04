@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Hexagon, ArrowLeft, ArrowRight, Shield, Cpu, Coins, Palette, Globe, Code2, CheckCircle2, UserPlus, Users, CreditCard, Key, HelpCircle, X, QrCode, AlertCircle, Building2, GraduationCap, HeartPulse, Wallet, Network, MonitorOff, Info } from 'lucide-react'
+import { Hexagon, ArrowLeft, ArrowRight, Shield, Cpu, Coins, Palette, Globe, Code2, CheckCircle2, UserPlus, Users, CreditCard, Key, HelpCircle, X, AlertCircle, Building2, GraduationCap, HeartPulse, Wallet, Network, MonitorOff, Info, Clock } from 'lucide-react'
 import Link from 'next/link'
 import * as THREE from 'three'
 import { Canvas, useFrame } from '@react-three/fiber'
@@ -118,16 +118,13 @@ export default function RegisterPage() {
     const [teamCode, setTeamCode] = useState('')
     const [teamName, setTeamName] = useState('')
     const [selectedTrack, setSelectedTrack] = useState('')
-
-    // 👇 NEW STATE: Added Phone and Email 👇
     const [personalDetails, setPersonalDetails] = useState({ name: '', college: '', phone: '', email: '' })
-    const [transactionId, setTransactionId] = useState('')
     const [generatedCode, setGeneratedCode] = useState('')
     const [isProcessing, setIsProcessing] = useState(false)
 
     // Track Capacity & Total Limits
     const [trackCounts, setTrackCounts] = useState<Record<string, number>>({})
-    const [totalTeamsCount, setTotalTeamsCount] = useState(0) // 👇 Added Total Count State
+    const [totalTeamsCount, setTotalTeamsCount] = useState(0)
 
     useEffect(() => {
         const checkMobile = () => setIsDesktop(window.innerWidth > 768)
@@ -148,20 +145,15 @@ export default function RegisterPage() {
                     total++;
                 });
                 setTrackCounts(counts);
-                setTotalTeamsCount(total); // 👇 Record total teams
+                setTotalTeamsCount(total);
             } catch (error) {
                 console.error("Failed to load track capacities", error);
             }
         };
         fetchTrackData();
 
-        // 👇 Pre-fill the email from Firebase Auth if available to save them time
-        const checkAuthUser = auth.onAuthStateChanged(user => {
-            if (user?.email) {
-                setPersonalDetails(prev => ({ ...prev, email: user.email as string }))
-            }
-        })
-        return () => checkAuthUser();
+        // Pre-fill email
+
     }, [])
 
     const handleRegistration = async () => {
@@ -176,10 +168,9 @@ export default function RegisterPage() {
                 await setDoc(doc(db, "teams", finalCode), {
                     teamName,
                     track: selectedTrack,
-                    members: [personalDetails], // Includes Phone & Email now
+                    members: [personalDetails],
                     createdAt: new Date().toISOString(),
-                    status: 'pending',
-                    transactionId: transactionId,
+                    status: 'approved', // Auto-Approved instantly!
                     leaderUid: auth.currentUser?.uid || ""
                 })
             } else if (flow === 'join') {
@@ -192,7 +183,6 @@ export default function RegisterPage() {
                     return
                 }
 
-                // 👇 CRITICAL FIX: Block joining if team already has 4 members 👇
                 if (teamSnap.data().members && teamSnap.data().members.length >= 4) {
                     alert("Registration Failed: This team already has the maximum of 4 members.")
                     setIsProcessing(false)
@@ -200,7 +190,7 @@ export default function RegisterPage() {
                 }
 
                 await updateDoc(teamRef, {
-                    members: arrayUnion(personalDetails) // Includes Phone & Email now
+                    members: arrayUnion(personalDetails)
                 })
                 finalCode = teamCode;
                 setGeneratedCode(finalCode)
@@ -214,16 +204,13 @@ export default function RegisterPage() {
                 console.error("CRITICAL: User lost auth state during registration.")
             }
 
-            setStep(4)
+            setStep(3) // Straight to the Success Page!
         } catch (error) {
             console.error(error)
             alert("Hive connection failed!")
         }
         setIsProcessing(false)
     }
-
-    const upiUri = "upi://pay?pa=minecraftsreyash@oksbi&pn=Hackbuzz%20Hive&am=1000.00&cu=INR"
-    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(upiUri)}&color=1c1917&bgcolor=ffffff`
 
     const activeTrackInfo = tracks.find(t => t.id === selectedTrack)
 
@@ -280,7 +267,6 @@ export default function RegisterPage() {
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {/* 👇 Updated to disable at 36 teams total */}
                                         <button
                                             disabled={totalTeamsCount >= 36}
                                             onClick={() => { if (totalTeamsCount < 36) { setFlow('create'); setStep(1) } }}
@@ -292,7 +278,7 @@ export default function RegisterPage() {
                                             </div>
                                             <h2 className={`text-2xl font-black uppercase mb-2 ${totalTeamsCount >= 36 ? 'text-stone-500' : 'text-stone-900'}`}>Create Team</h2>
                                             <p className="text-stone-500 font-medium text-sm">
-                                                {totalTeamsCount >= 36 ? 'Registration Full. Maximum 36 teams reached.' : 'Captain pays ₹1000 total. Pick your track and generate an invite code.'}
+                                                {totalTeamsCount >= 36 ? 'Registration Full. Maximum 36 teams reached.' : 'Pick your track and generate a secure invite code for your squad. Tracks are strictly First-Come, First-Serve!'}
                                             </p>
                                         </button>
 
@@ -300,7 +286,7 @@ export default function RegisterPage() {
                                             <div className="absolute top-0 left-0 w-1.5 h-full bg-stone-900 scale-y-0 group-hover:scale-y-100 transition-transform origin-top" />
                                             <div className="w-14 h-14 bg-stone-100 rounded-2xl flex items-center justify-center mb-6 border border-stone-200 group-hover:scale-110 transition-transform"><Users className="w-7 h-7 text-stone-600" /></div>
                                             <h2 className="text-2xl font-black text-stone-900 uppercase mb-2">Join Team</h2>
-                                            <p className="text-stone-500 font-medium text-sm">Join for free using the 6-digit code provided by your Captain.</p>
+                                            <p className="text-stone-500 font-medium text-sm">Connect your profile using the 6-digit code provided by your Captain.</p>
                                         </button>
                                     </div>
                                 </motion.div>
@@ -310,7 +296,18 @@ export default function RegisterPage() {
                             {flow === 'create' && step === 1 && (
                                 <motion.div key="create" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                                     <h1 className="text-3xl font-black text-stone-900 uppercase tracking-tight mb-2">Establish Squad</h1>
-                                    <p className="text-stone-500 font-medium mb-8">Set your team name and target sector. (Max 6 teams per track)</p>
+                                    <p className="text-stone-500 font-medium mb-6">Set your team name and target sector to initialize the database.</p>
+
+                                    {/* FIRST COME FIRST SERVE WARNING */}
+                                    <div className="bg-yellow-100 border border-yellow-300 p-4 rounded-2xl mb-8 flex items-start gap-3 shadow-sm">
+                                        <Clock className="w-6 h-6 text-yellow-600 shrink-0 mt-0.5" />
+                                        <div>
+                                            <h3 className="font-black text-yellow-800 uppercase tracking-wide text-sm mb-1">⚠️ First-Come, First-Serve</h3>
+                                            <p className="text-yellow-700 text-xs font-bold leading-relaxed">
+                                                Each theme is strictly capped at a maximum of 6 teams. Once a track hits its capacity, it will be locked and permanently disabled. Move fast.
+                                            </p>
+                                        </div>
+                                    </div>
 
                                     <div className="space-y-8">
                                         <div>
@@ -323,14 +320,14 @@ export default function RegisterPage() {
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                 {tracks.map((track) => {
                                                     const count = trackCounts[track.id] || 0;
-                                                    const isFull = count >= 6;
+                                                    const isFull = count >= 6; // Locks it out instantly at 6 teams
 
                                                     return (
                                                         <div
                                                             key={track.id}
                                                             onClick={() => !isFull && setSelectedTrack(track.id)}
                                                             className={`relative overflow-hidden border p-4 rounded-2xl flex flex-col justify-center transition-all ${isFull
-                                                                ? 'bg-stone-100 border-stone-200 opacity-60 cursor-not-allowed'
+                                                                ? 'bg-stone-100 border-stone-200 opacity-60 cursor-not-allowed grayscale'
                                                                 : selectedTrack === track.id
                                                                     ? 'cursor-pointer border-yellow-400 bg-white shadow-md'
                                                                     : 'cursor-pointer border-white/60 bg-white/40 hover:bg-white/80 hover:border-stone-200'
@@ -340,15 +337,15 @@ export default function RegisterPage() {
 
                                                             <div className="flex items-center justify-between w-full">
                                                                 <div className="flex items-center gap-3">
-                                                                    <div className={`p-3 rounded-xl ${isFull ? 'bg-stone-200' : track.bg}`}>
-                                                                        <track.icon className={`w-6 h-6 ${isFull ? 'text-stone-400' : track.color}`} />
+                                                                    <div className={`p-3 rounded-xl ${isFull ? 'bg-stone-300' : track.bg}`}>
+                                                                        <track.icon className={`w-6 h-6 ${isFull ? 'text-stone-500' : track.color}`} />
                                                                     </div>
-                                                                    <span className={`font-bold ${isFull ? 'text-stone-400 line-through' : selectedTrack === track.id ? 'text-stone-900' : 'text-stone-600'}`}>
+                                                                    <span className={`font-bold ${isFull ? 'text-stone-500 line-through' : selectedTrack === track.id ? 'text-stone-900' : 'text-stone-600'}`}>
                                                                         {track.name}
                                                                     </span>
                                                                 </div>
                                                                 {isFull && (
-                                                                    <span className="text-[10px] font-black uppercase bg-stone-200 text-stone-500 px-2 py-1 rounded-md">Filled</span>
+                                                                    <span className="text-[10px] font-black uppercase bg-stone-300 text-stone-600 px-2 py-1 rounded-md tracking-wider">Filled</span>
                                                                 )}
                                                             </div>
                                                         </div>
@@ -411,7 +408,7 @@ export default function RegisterPage() {
                                 </motion.div>
                             )}
 
-                            {/* STEP 2: PERSONAL DETAILS (UPDATED WITH PHONE & EMAIL) */}
+                            {/* STEP 2: PERSONAL DETAILS */}
                             {step === 2 && (
                                 <motion.div key="details" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                                     <h1 className="text-3xl font-black text-stone-900 uppercase tracking-tight mb-2">Hacker Profile</h1>
@@ -429,7 +426,7 @@ export default function RegisterPage() {
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-bold text-stone-500 uppercase mb-3 tracking-wider">Phone Number</label>
-                                                <input type="tel" value={personalDetails.phone} onChange={(e) => setPersonalDetails({ ...personalDetails, phone: e.target.value })} placeholder="+91 98765 43210" className="w-full px-5 py-4 bg-white/70 border border-stone-200 rounded-2xl outline-none focus:border-yellow-400 focus:bg-white transition-all font-bold text-stone-900" />
+                                                <input type="tel" value={personalDetails.phone} onChange={(e) => setPersonalDetails({ ...personalDetails, phone: e.target.value })} placeholder="+91 9999999999" className="w-full px-5 py-4 bg-white/70 border border-stone-200 rounded-2xl outline-none focus:border-yellow-400 focus:bg-white transition-all font-bold text-stone-900" />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-bold text-stone-500 uppercase mb-3 tracking-wider">College</label>
@@ -442,71 +439,28 @@ export default function RegisterPage() {
 
                                             <button
                                                 disabled={!personalDetails.name || !personalDetails.college || !personalDetails.phone || !personalDetails.email || isProcessing}
-                                                onClick={() => flow === 'create' ? setStep(3) : handleRegistration()}
+                                                onClick={handleRegistration} // Directly calls the DB now
                                                 className="flex-1 py-4 bg-stone-900 text-yellow-400 font-black text-lg rounded-2xl hover:bg-stone-800 transition-colors uppercase tracking-widest disabled:opacity-50 flex justify-center items-center gap-2 shadow-lg"
                                             >
-                                                {isProcessing ? 'Processing...' : (flow === 'create' ? 'Proceed to Payment' : 'Join Team Now')} <ArrowRight className="w-5 h-5" />
+                                                {isProcessing ? 'Deploying...' : (flow === 'create' ? 'Initialize Squad' : 'Join Team Now')} <ArrowRight className="w-5 h-5" />
                                             </button>
                                         </div>
                                     </div>
                                 </motion.div>
                             )}
 
-                            {/* STEP 3: QR PAYMENT GATEWAY */}
+                            {/* STEP 3: SUCCESS PAGE */}
                             {step === 3 && (
-                                <motion.div key="payment" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="text-center">
-                                    <h1 className="text-3xl font-black text-stone-900 uppercase tracking-tight mb-4">Deploy Funds</h1>
-                                    <p className="text-stone-500 font-medium mb-8">Scan to pay ₹1000 securely via UPI.</p>
-
-                                    <div className="bg-white border-2 border-stone-100 rounded-3xl p-8 mb-8 max-w-sm mx-auto shadow-lg relative overflow-hidden">
-                                        <div className="absolute top-0 left-0 w-full h-2 bg-yellow-400" />
-
-                                        <div className="bg-stone-50 p-4 rounded-2xl mb-6 inline-block border-2 border-stone-200 shadow-[inset_0_2px_4px_rgba(0,0,0,0.05)] relative group">
-                                            {/* Bee Icon Overlay */}
-                                            <div className="absolute -top-3 -right-3 w-8 h-8 bg-yellow-400 rounded-full border-2 border-white shadow-sm flex items-center justify-center z-10">
-                                                <QrCode className="w-4 h-4 text-stone-900" />
-                                            </div>
-                                            <img src={qrCodeUrl} alt="UPI QR Code" className="w-48 h-48 mix-blend-multiply" />
-                                        </div>
-
-                                        <div className="text-left space-y-4">
-                                            <div className="flex justify-between items-center border-b border-stone-100 pb-3">
-                                                <span className="font-bold text-stone-500 uppercase text-xs">UPI ID</span>
-                                                <span className="font-black text-stone-900 text-sm">minecraftsreyash@oksbi</span>
-                                            </div>
-                                            <div className="flex justify-between items-center">
-                                                <span className="font-black text-stone-900 uppercase text-lg">Total Due</span>
-                                                <span className="font-black text-yellow-500 text-3xl">₹1000</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="max-w-sm mx-auto text-left mb-8">
-                                        <label className="block text-sm font-bold text-stone-500 uppercase mb-3 tracking-wider">Transaction ID / UTR</label>
-                                        <input type="text" value={transactionId} onChange={(e) => setTransactionId(e.target.value)} placeholder="Enter 12-digit UTR number" required className="w-full px-5 py-4 bg-white/70 border border-stone-200 rounded-2xl outline-none focus:border-yellow-400 focus:bg-white transition-all font-bold text-stone-900" />
-                                    </div>
-
-                                    <div className="flex gap-4 max-w-sm mx-auto">
-                                        <button onClick={() => setStep(2)} className="px-6 py-4 bg-white border border-stone-200 text-stone-600 font-bold rounded-2xl hover:bg-stone-50 transition-colors">Back</button>
-                                        <button disabled={isProcessing || transactionId.length < 8} onClick={handleRegistration} className="flex-1 py-4 bg-yellow-400 text-stone-900 font-black text-lg rounded-2xl hover:bg-yellow-500 transition-colors uppercase tracking-widest disabled:opacity-50 flex justify-center items-center gap-2 shadow-[0_8px_30px_rgba(250,204,21,0.3)]">
-                                            {isProcessing ? 'Processing...' : 'Verify Payment'} <ArrowRight className="w-5 h-5" />
-                                        </button>
-                                    </div>
-                                </motion.div>
-                            )}
-
-                            {/* STEP 4: SUCCESS / PENDING */}
-                            {step === 4 && (
                                 <motion.div key="success" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-8">
 
                                     {flow === 'create' ? (
                                         <>
-                                            <div className="mx-auto w-24 h-24 bg-orange-100 border border-orange-200 rounded-[2rem] flex items-center justify-center mb-8 shadow-sm">
-                                                <AlertCircle className="w-12 h-12 text-orange-500" />
+                                            <div className="mx-auto w-24 h-24 bg-green-100 border border-green-200 rounded-[2rem] flex items-center justify-center mb-8 shadow-sm">
+                                                <CheckCircle2 className="w-12 h-12 text-green-500" />
                                             </div>
-                                            <h1 className="text-4xl md:text-5xl font-black text-stone-900 uppercase tracking-tight mb-6">Payment Under Review</h1>
+                                            <h1 className="text-4xl md:text-5xl font-black text-stone-900 uppercase tracking-tight mb-6">Squad Initialized</h1>
                                             <p className="text-stone-600 font-medium text-lg mb-6 max-w-md mx-auto">
-                                                Your UTR is being verified by the Hive Admins. In the meantime, send this code to your squad so they can join <span className="text-stone-900 font-bold">{teamName}</span>.
+                                                Your team is live on the Hive servers. Send this code to your squad so they can join <span className="text-stone-900 font-bold">{teamName}</span>.
                                             </p>
                                             <div className="inline-block px-12 py-6 bg-stone-50 border border-stone-200 rounded-3xl mb-8 relative overflow-hidden">
                                                 <div className="absolute left-0 top-0 w-1.5 h-full bg-yellow-400" />
@@ -558,21 +512,21 @@ export default function RegisterPage() {
                                     <div className="w-8 h-8 rounded-full bg-stone-900 text-yellow-400 flex items-center justify-center font-black shrink-0">1</div>
                                     <div>
                                         <h3 className="font-bold text-stone-900">Captain Creates Team</h3>
-                                        <p className="text-sm text-stone-500">One person acts as the captain. They pick the track, fill out their details, and pay the flat ₹1000 team fee via QR.</p>
+                                        <p className="text-sm text-stone-500">One person acts as the captain. They pick the track and fill out their details to generate an invite code. Tracks are First-Come, First-Serve!</p>
                                     </div>
                                 </div>
                                 <div className="flex gap-4">
                                     <div className="w-8 h-8 rounded-full bg-stone-900 text-yellow-400 flex items-center justify-center font-black shrink-0">2</div>
                                     <div>
                                         <h3 className="font-bold text-stone-900">Share the Code</h3>
-                                        <p className="text-sm text-stone-500">After submitting the UTR, the Captain receives a 6-digit Hive Code (e.g., HV-A9X2). Send this to your teammates.</p>
+                                        <p className="text-sm text-stone-500">The Captain receives a 6-digit Hive Code (e.g., HV-A9X2). Send this to your teammates.</p>
                                     </div>
                                 </div>
                                 <div className="flex gap-4">
                                     <div className="w-8 h-8 rounded-full bg-stone-900 text-yellow-400 flex items-center justify-center font-black shrink-0">3</div>
                                     <div>
-                                        <h3 className="font-bold text-stone-900">Hackers Join for Free</h3>
-                                        <p className="text-sm text-stone-500">Teammates click "Join Team", enter the code, and are instantly added to the roster without paying.</p>
+                                        <h3 className="font-bold text-stone-900">Hackers Join</h3>
+                                        <p className="text-sm text-stone-500">Teammates click "Join Team", enter the code, and are instantly added to the roster.</p>
                                     </div>
                                 </div>
                             </div>
