@@ -62,6 +62,11 @@ export default function HackerDashboard() {
     const [submissionsUnlocked, setSubmissionsUnlocked] = useState(false)
     const [rouletteUnlocked, setRouletteUnlocked] = useState(false)
 
+    // Clock States
+    const [clockEndTime, setClockEndTime] = useState<number | null>(null)
+    const [timeLeft, setTimeLeft] = useState<string>("24:00:00")
+    const [timeAngles, setTimeAngles] = useState({ h: 0, m: 0, s: 0 })
+
     // FETCH DATA FROM FIREBASE ON LOAD
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -97,17 +102,53 @@ export default function HackerDashboard() {
         return () => unsubscribe()
     }, [router])
 
-    // LISTEN FOR ADMIN MASTER LOCKS
+    // LISTEN FOR ADMIN MASTER LOCKS & CLOCK
     useEffect(() => {
         const unsubConfig = onSnapshot(doc(db, "config", "system"), (snap) => {
             if (snap.exists()) {
                 const data = snap.data()
                 setSubmissionsUnlocked(data.eventStarted || false)
                 setRouletteUnlocked(data.rouletteUnlocked || false)
+                setClockEndTime(data.clockEndTime || null)
             }
         })
         return () => unsubConfig()
     }, [])
+
+    // THE 24-HOUR CLOCK ENGINE
+    useEffect(() => {
+        if (!clockEndTime) {
+            setTimeLeft("24:00:00")
+            setTimeAngles({ h: 0, m: 0, s: 0 })
+            return
+        }
+
+        const timer = setInterval(() => {
+            const now = Date.now()
+            const difference = clockEndTime - now
+
+            if (difference <= 0) {
+                setTimeLeft("00:00:00")
+                setTimeAngles({ h: 0, m: 0, s: 0 })
+                clearInterval(timer)
+            } else {
+                const hours = Math.floor((difference / (1000 * 60 * 60)) % 24)
+                const minutes = Math.floor((difference / 1000 / 60) % 60)
+                const seconds = Math.floor((difference / 1000) % 60)
+
+                setTimeLeft(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`)
+
+                // Calculate sweeping angles for the analog clock
+                const sDeg = (seconds / 60) * 360
+                const mDeg = (minutes / 60) * 360
+                const hDeg = ((hours % 12) / 12) * 360 + (minutes / 60) * 30
+
+                setTimeAngles({ h: hDeg, m: mDeg, s: sDeg })
+            }
+        }, 1000)
+
+        return () => clearInterval(timer)
+    }, [clockEndTime])
 
     const handleLogout = async () => {
         await signOut(auth)
@@ -138,7 +179,6 @@ export default function HackerDashboard() {
         }
     }
 
-    // UPDATED SOS PING: Properly structures data for the Admin panel
     const handleSosSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
@@ -159,7 +199,6 @@ export default function HackerDashboard() {
         }
     }
 
-    // THE ROULETTE SPIN LOGIC (UPGRADED FOR OBJECTS)
     const handleSpinWheel = async () => {
         if (!isLeader) return alert("Only the Captain can draw.")
         setIsSpinning(true)
@@ -178,14 +217,12 @@ export default function HackerDashboard() {
             let counter = 0
             const spinInterval = setInterval(() => {
                 const item = livePool[counter++ % livePool.length]
-                // Fallback to string if old data, otherwise use the new title
                 setCurrentSpinText(typeof item === 'string' ? item : item.title || "???")
             }, 80)
 
             setTimeout(async () => {
                 clearInterval(spinInterval)
 
-                // Pick the final question object
                 const finalQuestion = livePool[Math.floor(Math.random() * livePool.length)]
                 setCurrentSpinText(typeof finalQuestion === 'string' ? finalQuestion : finalQuestion.title)
 
@@ -236,7 +273,6 @@ export default function HackerDashboard() {
     const isLeader = userUid === teamInfo.leaderUid
     const emptySlots = Array(Math.max(0, 4 - (teamInfo.members?.length || 0))).fill("Waiting...")
 
-    // Generate QR Data specifically for Admin check-in scanner
     const qrPayload = encodeURIComponent(JSON.stringify({ code: teamCode, team: teamInfo.teamName, track: teamInfo.track }))
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${qrPayload}&color=1c1917&bgcolor=ffffff&qzone=1`
 
@@ -279,19 +315,67 @@ export default function HackerDashboard() {
                     {/* LEFT COLUMN (Timeline, Comms & SOS) */}
                     <div className="lg:col-span-1 space-y-6">
 
+                        {/* CYBER-CORE ANALOG CLOCK */}
+                        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="bg-stone-900 border border-stone-800 shadow-[0_8px_30px_rgb(0,0,0,0.5)] rounded-[2rem] p-8 relative overflow-hidden text-center flex flex-col items-center">
+                            <div className="absolute top-0 left-0 w-full h-1.5 bg-yellow-400" />
+                            <h3 className="font-black text-stone-400 uppercase tracking-widest mb-8 text-sm flex items-center justify-center gap-2">
+                                <Clock className="w-4 h-4 text-yellow-400" /> Hacking Phase Timer
+                            </h3>
+
+                            {/* The Analog Dial */}
+                            <div className="relative w-48 h-48 rounded-full border-4 border-stone-800 bg-stone-950 flex items-center justify-center shadow-[inset_0_0_40px_rgba(0,0,0,0.8),_0_0_20px_rgba(250,204,21,0.15)]">
+
+                                {/* Inner Rotating Cyber Grid */}
+                                <motion.div animate={{ rotate: 360 }} transition={{ duration: 60, repeat: Infinity, ease: "linear" }} className="absolute inset-2 border-[1px] border-dashed border-stone-700/50 rounded-full" />
+                                <motion.div animate={{ rotate: -360 }} transition={{ duration: 120, repeat: Infinity, ease: "linear" }} className="absolute inset-5 border-[2px] border-dotted border-yellow-900/30 rounded-full" />
+
+                                {/* Clock Markers */}
+                                {[...Array(12)].map((_, i) => (
+                                    <div key={i} className="absolute w-full h-full" style={{ transform: `rotate(${i * 30}deg)` }}>
+                                        <div className="mx-auto w-1 h-3 bg-stone-700 mt-2 rounded-full" />
+                                    </div>
+                                ))}
+
+                                {/* Center Node */}
+                                <div className="absolute w-4 h-4 bg-yellow-400 rounded-full z-20 shadow-[0_0_15px_#facc15]" />
+
+                                {/* Hour Hand (Short, thick) */}
+                                <div className="absolute w-full h-full z-10 transition-transform duration-500 ease-linear" style={{ transform: `rotate(${timeAngles.h}deg)` }}>
+                                    <div className="mx-auto w-2 h-14 bg-stone-400 mt-10 rounded-full shadow-md" />
+                                </div>
+
+                                {/* Minute Hand (Long, yellow glow) */}
+                                <div className="absolute w-full h-full z-10 transition-transform duration-500 ease-linear" style={{ transform: `rotate(${timeAngles.m}deg)` }}>
+                                    <div className="mx-auto w-1.5 h-20 bg-yellow-400 mt-4 rounded-full shadow-[0_0_12px_#facc15]" />
+                                </div>
+
+                                {/* Second Hand (Longest, thin red sweep) */}
+                                <div className="absolute w-full h-full z-10 transition-transform duration-500 ease-linear" style={{ transform: `rotate(${timeAngles.s}deg)` }}>
+                                    <div className="mx-auto w-0.5 h-24 bg-red-500 mt-0 rounded-full shadow-[0_0_8px_#ef4444]" />
+                                </div>
+                            </div>
+
+                            {/* Digital Terminal Readout */}
+                            <div className="mt-8 bg-black py-3 px-6 rounded-2xl border border-stone-800 inline-block shadow-inner w-full">
+                                <span className="font-mono font-black text-3xl text-yellow-400 tracking-[0.1em]">{timeLeft}</span>
+                            </div>
+
+                            {!clockEndTime && <p className="text-[10px] text-stone-500 mt-4 uppercase font-bold tracking-widest animate-pulse">Awaiting Server Sync...</p>}
+                        </motion.div>
+
                         {/* EVENT STATUS CARD */}
-                        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="bg-white/60 backdrop-blur-2xl border border-white/50 shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-[2rem] p-8 relative overflow-hidden">
+                        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="bg-white/60 backdrop-blur-2xl border border-white/50 shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-[2rem] p-8 relative overflow-hidden">
                             <div className={`absolute top-0 left-0 w-full h-1.5 ${submissionsUnlocked ? 'bg-green-500' : 'bg-stone-900'}`} />
                             <div className="flex items-center gap-3 mb-6">
                                 <div className="p-3 bg-stone-100 rounded-xl"><Activity className="w-6 h-6 text-stone-900" /></div>
-                                <h3 className="font-black text-stone-900 uppercase">Hive Status</h3>
+                                <h3 className="font-black text-stone-900 uppercase">Submission Status</h3>
                             </div>
 
                             {submissionsUnlocked ? (
                                 <div className="text-center py-6 bg-green-50 rounded-2xl border border-green-200">
                                     <Unlock className="w-8 h-8 text-green-500 mx-auto mb-2 animate-pulse" />
-                                    <h2 className="text-2xl font-black text-green-600 uppercase tracking-widest">Hackathon Live</h2>
-                                    <p className="font-bold text-green-700 uppercase tracking-widest text-[10px] mt-1">Submissions Unlocked</p>
+                                    <h2 className="text-2xl font-black text-green-600 uppercase tracking-widest">Portal Live</h2>
+                                    <p className="font-bold text-green-700 uppercase tracking-widest text-[10px] mt-1">Deploy Your Artifacts</p>
                                 </div>
                             ) : (
                                 <div className="text-center py-6 bg-stone-100 rounded-2xl border border-stone-200">
@@ -300,22 +384,6 @@ export default function HackerDashboard() {
                                     <p className="font-bold text-stone-400 uppercase tracking-widest text-[10px] mt-1">Awaiting Admin Unlock</p>
                                 </div>
                             )}
-                        </motion.div>
-
-                        {/* LIVE ANNOUNCEMENTS */}
-                        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="bg-white/60 backdrop-blur-2xl border border-white/50 shadow-[0_8px_30px_rgb(0,0,0,0.08)] rounded-[2rem] p-8 relative overflow-hidden h-[250px] flex flex-col">
-                            <div className="absolute top-0 left-0 w-full h-1.5 bg-yellow-400" />
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="p-3 bg-yellow-100 rounded-xl"><Bell className="w-6 h-6 text-yellow-600" /></div>
-                                <h3 className="font-black text-stone-900 uppercase">Hive Intel</h3>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                                <div className="border-l-2 border-yellow-400 pl-4 py-1">
-                                    <span className="text-xs font-bold text-stone-400 uppercase">System</span>
-                                    <p className="font-medium text-stone-900 text-sm">Keep this dashboard open for roulette spins and final submission links.</p>
-                                </div>
-                            </div>
                         </motion.div>
 
                         {/* HIVE SOS (SUPPORT BEACON) */}

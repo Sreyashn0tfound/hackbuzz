@@ -2,33 +2,27 @@
 
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Hexagon, ArrowLeft, Users, Terminal, DollarSign, Database, Activity, AlertTriangle, ShieldAlert, CheckCircle2, PlayCircle, PlusCircle, XCircle, Building2, GraduationCap, HeartPulse, Wallet, Network, MonitorOff } from 'lucide-react'
+import { Hexagon, ArrowLeft, Users, Terminal, DollarSign, Database, Activity, AlertTriangle, ShieldAlert, CheckCircle2, PlayCircle, PlusCircle, XCircle, Clock, RefreshCw, QrCode, Rocket } from 'lucide-react'
 import Link from 'next/link'
-// MAKE SURE 'app' IS IMPORTED HERE 👇
 import { db, auth, app } from '../../lib/firebase'
-import { collection, doc, updateDoc, onSnapshot, setDoc, addDoc, arrayUnion } from 'firebase/firestore'
-// ADD THESE NEW FIREBASE AUTH/APP IMPORTS 👇
+import { collection, doc, updateDoc, onSnapshot, setDoc, arrayUnion } from 'firebase/firestore'
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { initializeApp, getApps } from 'firebase/app'
 
 export default function AdminDashboard() {
-    // NEW: Detailed Question Vault State 👇
-    const [qForm, setQForm] = useState({
-        title: '',
-        description: '',
-        constraints: '',
-        output: ''
-    })
+    const [qForm, setQForm] = useState({ title: '', description: '', constraints: '', output: '' })
     const [qTrack, setQTrack] = useState('Urban Friction')
-
     const [teams, setTeams] = useState<any[]>([])
     const [sosTickets, setSosTickets] = useState<any[]>([])
 
     // SYSTEM CONFIG STATES
     const [eventStarted, setEventStarted] = useState(false)
     const [rouletteUnlocked, setRouletteUnlocked] = useState(false)
-
     const [metrics, setMetrics] = useState({ totalTeams: 0, pendingTeams: 0, revenue: 0 })
+
+    // CLOCK STATES
+    const [clockEndTime, setClockEndTime] = useState<number | null>(null)
+    const [timeLeft, setTimeLeft] = useState<string>("24:00:00")
 
     // Judge Form State
     const [judgeEmail, setJudgeEmail] = useState('')
@@ -37,12 +31,13 @@ export default function AdminDashboard() {
     const [judgeAdded, setJudgeAdded] = useState(false)
 
     useEffect(() => {
-        // REAL-TIME: Master Config
+        // REAL-TIME: Master Config & Clock
         const unsubConfig = onSnapshot(doc(db, "config", "system"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data()
                 setEventStarted(data.eventStarted || false)
                 setRouletteUnlocked(data.rouletteUnlocked || false)
+                setClockEndTime(data.clockEndTime || null)
             }
         })
 
@@ -65,12 +60,48 @@ export default function AdminDashboard() {
         const unsubSos = onSnapshot(collection(db, "sos_tickets"), (snap) => {
             const tickets: any[] = []
             snap.forEach(doc => { if (doc.data().status === 'active') tickets.push({ id: doc.id, ...doc.data() }) })
-            // Sort newest first
             setSosTickets(tickets.sort((a, b) => b.timestamp - a.timestamp))
         })
 
         return () => { unsubConfig(); unsubTeams(); unsubSos() }
     }, [])
+
+    // CLOCK TICK TICK TICK
+    useEffect(() => {
+        if (!clockEndTime) {
+            setTimeLeft("24:00:00")
+            return
+        }
+
+        const timer = setInterval(() => {
+            const now = Date.now()
+            const difference = clockEndTime - now
+
+            if (difference <= 0) {
+                setTimeLeft("00:00:00")
+                clearInterval(timer)
+            } else {
+                const hours = Math.floor((difference / (1000 * 60 * 60)) % 24)
+                const minutes = Math.floor((difference / 1000 / 60) % 60)
+                const seconds = Math.floor((difference / 1000) % 60)
+                setTimeLeft(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`)
+            }
+        }, 1000)
+
+        return () => clearInterval(timer)
+    }, [clockEndTime])
+
+    // CLOCK CONTROLS
+    const handleStartClock = async () => {
+        const endTime = Date.now() + (24 * 60 * 60 * 1000) // 24 Hours from now
+        await setDoc(doc(db, "config", "system"), { clockEndTime: endTime }, { merge: true })
+    }
+
+    const handleResetClock = async () => {
+        if (confirm("Reset the master 24-hour clock? This will stop the countdown.")) {
+            await setDoc(doc(db, "config", "system"), { clockEndTime: null }, { merge: true })
+        }
+    }
 
     // Approvals
     const handleApproval = async (teamId: string, status: 'approved' | 'rejected') => {
@@ -83,95 +114,56 @@ export default function AdminDashboard() {
         await updateDoc(doc(db, "sos_tickets", id), { status: 'resolved' })
     }
 
-    // MANUAL TOGGLES
     const toggleEventStatus = async () => {
         const newStatus = !eventStarted;
-        const msg = newStatus ?
-            "WARNING: This will UNLOCK project submissions for all teams. Proceed?" :
-            "WARNING: This will LOCK project submissions. Proceed?";
-
-        if (confirm(msg)) {
-            await setDoc(doc(db, "config", "system"), { eventStarted: newStatus }, { merge: true })
-        }
+        const msg = newStatus ? "WARNING: This will UNLOCK project submissions for all teams. Proceed?" : "WARNING: This will LOCK project submissions. Proceed?";
+        if (confirm(msg)) await setDoc(doc(db, "config", "system"), { eventStarted: newStatus }, { merge: true })
     }
 
     const toggleRoulette = async () => {
         const newStatus = !rouletteUnlocked;
-        const msg = newStatus ?
-            "This will UNLOCK the Question Roulette for all approved teams. Proceed?" :
-            "This will LOCK the Question Roulette. Proceed?";
-
-        if (confirm(msg)) {
-            await setDoc(doc(db, "config", "system"), { rouletteUnlocked: newStatus }, { merge: true })
-        }
+        const msg = newStatus ? "This will UNLOCK the Question Roulette for all approved teams. Proceed?" : "This will LOCK the Question Roulette. Proceed?";
+        if (confirm(msg)) await setDoc(doc(db, "config", "system"), { rouletteUnlocked: newStatus }, { merge: true })
     }
 
     const handleTransferCaptain = async (teamId: string) => {
         const newLeaderUid = prompt("Enter the UID of the new Captain (must be an existing member's UID):")
         if (!newLeaderUid || !newLeaderUid.trim()) return
-
         if (confirm("Are you sure you want to transfer captaincy to UID: " + newLeaderUid + "?")) {
             try {
-                await updateDoc(doc(db, "teams", teamId), {
-                    leaderUid: newLeaderUid.trim()
-                })
+                await updateDoc(doc(db, "teams", teamId), { leaderUid: newLeaderUid.trim() })
                 alert("Captaincy transferred successfully.")
-            } catch (error) {
-                console.error("Failed to transfer captain:", error)
-                alert("Failed to transfer captain.")
-            }
+            } catch (error) { alert("Failed to transfer captain.") }
         }
     }
 
     const handleAddJudge = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
-            // 1. Spin up a "Shadow" Firebase App so the Admin doesn't get logged out!
             const shadowAppName = "ShadowApp";
             const shadowApp = getApps().find(a => a.name === shadowAppName) || initializeApp(app.options, shadowAppName);
             const shadowAuth = getAuth(shadowApp);
-
-            // 2. Create the Judge in Firebase Auth using the Shadow App
             const userCredential = await createUserWithEmailAndPassword(shadowAuth, judgeEmail, judgePass);
             const judgeUid = userCredential.user.uid;
-
-            // 3. Instantly log out the Shadow App
             await signOut(shadowAuth);
 
-            // 4. Save them to the Master Database as a Judge (Using your main DB connection)
             await setDoc(doc(db, "users", judgeUid), {
-                uid: judgeUid,
-                name: `Judge (${judgeTrack})`,
-                email: judgeEmail,
-                role: 'judge',
-                track: judgeTrack,
-                joinedAt: new Date().toISOString()
+                uid: judgeUid, name: `Judge (${judgeTrack})`, email: judgeEmail, role: 'judge', track: judgeTrack, joinedAt: new Date().toISOString()
             });
 
             setJudgeAdded(true)
             setJudgeEmail(''); setJudgePass('')
             setTimeout(() => setJudgeAdded(false), 3000)
-        } catch (err: any) {
-            console.error(err)
-            alert("Failed to create Judge: " + err.message)
-        }
+        } catch (err: any) { alert("Failed to create Judge: " + err.message) }
     }
 
-    // UPDATED: Now saves the structured object instead of a string
     const handleAddQuestion = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
-            await setDoc(doc(db, "track_questions", qTrack), {
-                pool: arrayUnion(qForm)
-            }, { merge: true })
-
-            // Reset the form
+            await setDoc(doc(db, "track_questions", qTrack), { pool: arrayUnion(qForm) }, { merge: true })
             setQForm({ title: '', description: '', constraints: '', output: '' })
             alert(`Structured Objective locked into the vault for ${qTrack}!`)
-        } catch (err) {
-            console.error(err)
-            alert("Failed to add question.")
-        }
+        } catch (err) { alert("Failed to add question.") }
     }
 
     return (
@@ -188,7 +180,7 @@ export default function AdminDashboard() {
 
             <div className="max-w-7xl mx-auto space-y-6">
 
-                {/* METRICS & EVENT CONTROL */}
+                {/* METRICS & EVENT CONTROL ROW */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="bg-white border p-6 rounded-3xl shadow-sm flex flex-col justify-center">
                         <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Active Revenue</p>
@@ -219,10 +211,22 @@ export default function AdminDashboard() {
                         </div>
                     </div>
 
-                    <div className="bg-white border p-6 rounded-3xl shadow-sm flex flex-col justify-center items-center text-center">
-                        <Activity className="w-8 h-8 text-yellow-500 mb-2" />
-                        <p className="text-xs font-bold text-stone-500 uppercase tracking-wider">System Status</p>
-                        <p className="text-xl font-black text-stone-900">Optimal</p>
+                    {/* NEW: THE 24 HOUR CLOCK BLOCK */}
+                    <div className="bg-stone-900 border border-stone-800 p-6 rounded-3xl shadow-lg flex flex-col justify-center items-center text-center relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1.5 bg-yellow-400" />
+                        <p className="text-xs font-black text-stone-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Event Timer</p>
+                        <p className="text-4xl font-mono font-black text-yellow-400 tracking-wider mb-4">{timeLeft}</p>
+                        <div className="flex gap-2 w-full">
+                            {clockEndTime ? (
+                                <button onClick={handleResetClock} className="flex-1 py-2 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white rounded-lg text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1 transition-colors">
+                                    <RefreshCw className="w-3 h-3" /> Reset
+                                </button>
+                            ) : (
+                                <button onClick={handleStartClock} className="flex-1 py-2 bg-yellow-400 text-stone-900 hover:bg-yellow-500 rounded-lg text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1 transition-colors">
+                                    <PlayCircle className="w-3 h-3" /> Start 24H Clock
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -256,35 +260,57 @@ export default function AdminDashboard() {
                             </div>
                         )}
 
-                        {/* MASTER ROSTER */}
+                        {/* MASTER ROSTER (UPGRADED WITH STATUS PILLS) */}
                         <div className="bg-white border shadow-sm rounded-3xl overflow-hidden relative">
                             <div className="absolute top-0 left-0 w-full h-1.5 bg-stone-900" />
-                            <div className="p-6 border-b border-stone-100"><h3 className="font-black text-xl uppercase">Approved Squads</h3></div>
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-stone-50">
-                                        <th className="p-4 font-bold text-stone-500 text-xs uppercase">Team</th>
-                                        <th className="p-4 font-bold text-stone-500 text-xs uppercase">Track</th>
-                                        <th className="p-4 font-bold text-stone-500 text-xs uppercase">Gacha Question</th>
-                                        <th className="p-4 font-bold text-stone-500 text-xs uppercase text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-stone-100">
-                                    {teams.filter(t => t.status === 'approved').map(team => (
-                                        <tr key={team.id}>
-                                            <td className="p-4 font-black">{team.teamName}</td>
-                                            <td className="p-4"><span className="px-2 py-1 bg-stone-100 rounded text-xs font-bold uppercase">{team.track}</span></td>
-                                            <td className="p-4 text-sm font-medium text-stone-600 max-w-[200px] truncate">
-                                                {/* CRITICAL FIX: Safe render if assignedQuestion is an object */}
-                                                {team.assignedQuestion ? (team.assignedQuestion.title || team.assignedQuestion) : "Not Spun Yet"}
-                                            </td>
-                                            <td className="p-4 text-right">
-                                                <button onClick={() => handleTransferCaptain(team.id)} className="px-3 py-1 bg-stone-900 text-yellow-400 font-bold text-[10px] uppercase rounded hover:bg-stone-800 transition-colors">Transfer Captain</button>
-                                            </td>
+                            <div className="p-6 border-b border-stone-100 flex justify-between items-center">
+                                <h3 className="font-black text-xl uppercase">Approved Squads</h3>
+                                <Link href="/scanner" target="_blank" className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-900 text-xs font-black uppercase rounded-xl flex items-center gap-2 transition-colors">
+                                    <QrCode className="w-4 h-4" /> Open Scanner
+                                </Link>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse min-w-[800px]">
+                                    <thead>
+                                        <tr className="bg-stone-50">
+                                            <th className="p-4 font-bold text-stone-500 text-xs uppercase w-[25%]">Team</th>
+                                            <th className="p-4 font-bold text-stone-500 text-xs uppercase w-[20%]">Status</th>
+                                            <th className="p-4 font-bold text-stone-500 text-xs uppercase w-[40%]">Gacha Question</th>
+                                            <th className="p-4 font-bold text-stone-500 text-xs uppercase text-right w-[15%]">Actions</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="divide-y divide-stone-100">
+                                        {teams.filter(t => t.status === 'approved').map(team => (
+                                            <tr key={team.id}>
+                                                <td className="p-4">
+                                                    <div className="font-black text-stone-900 text-base">{team.teamName}</div>
+                                                    <div className="text-[10px] font-bold text-stone-500 uppercase mt-1">{team.track}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="flex flex-col gap-1.5 items-start">
+                                                        {team.checkedIn ? (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-black uppercase rounded border border-green-200"><CheckCircle2 className="w-3 h-3" /> Checked In</span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 text-stone-500 text-[10px] font-black uppercase rounded border border-stone-200"><AlertTriangle className="w-3 h-3" /> Not Arrived</span>
+                                                        )}
+                                                        {team.isSubmitted ? (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-black uppercase rounded border border-blue-200"><Rocket className="w-3 h-3" /> Deployed</span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 text-stone-500 text-[10px] font-black uppercase rounded border border-stone-200"><Terminal className="w-3 h-3" /> Building...</span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-sm font-medium text-stone-600 max-w-[200px] truncate">
+                                                    {team.assignedQuestion ? (team.assignedQuestion.title || team.assignedQuestion) : "Not Spun Yet"}
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    <button onClick={() => handleTransferCaptain(team.id)} className="px-3 py-1.5 bg-stone-900 text-yellow-400 font-bold text-[10px] uppercase rounded-lg hover:bg-stone-800 transition-colors">Transfer Captain</button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
 
@@ -313,19 +339,15 @@ export default function AdminDashboard() {
                             </form>
                         </div>
 
-                        {/* DETAILED QUESTION VAULT 👇 */}
+                        {/* DETAILED QUESTION VAULT */}
                         <div className="bg-white border shadow-sm rounded-3xl p-6 relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-1.5 bg-emerald-500" />
                             <h3 className="font-black text-xl uppercase mb-4">Objective Vault</h3>
                             <form onSubmit={handleAddQuestion} className="space-y-4">
                                 <input required value={qForm.title} onChange={(e) => setQForm({ ...qForm, title: e.target.value })} placeholder="Title (e.g. The invisible queue)" className="w-full p-3 bg-stone-50 border rounded-xl text-sm font-bold outline-none focus:border-emerald-400" />
-
                                 <textarea required value={qForm.description} onChange={(e) => setQForm({ ...qForm, description: e.target.value })} placeholder="Full Problem Description..." className="w-full p-3 bg-stone-50 border rounded-xl text-sm font-medium outline-none focus:border-emerald-400 h-24 resize-none" />
-
                                 <textarea required value={qForm.constraints} onChange={(e) => setQForm({ ...qForm, constraints: e.target.value })} placeholder="Constraints (e.g. No QR Codes)" className="w-full p-3 bg-stone-50 border rounded-xl text-sm font-medium outline-none focus:border-emerald-400 h-20 resize-none" />
-
                                 <textarea required value={qForm.output} onChange={(e) => setQForm({ ...qForm, output: e.target.value })} placeholder="Expected MVP Scope / Output" className="w-full p-3 bg-stone-50 border rounded-xl text-sm font-medium outline-none focus:border-emerald-400 h-20 resize-none" />
-
                                 <select value={qTrack} onChange={(e) => setQTrack(e.target.value)} className="w-full p-3 bg-stone-50 border rounded-xl text-sm font-bold outline-none focus:border-emerald-400">
                                     <option value="Urban Friction">Urban Friction</option>
                                     <option value="Learning Under Constraint">Learning Under Constraint</option>
