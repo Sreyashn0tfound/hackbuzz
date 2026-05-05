@@ -1,9 +1,9 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Hexagon, QrCode, CheckCircle2, XCircle, UserCheck, ShieldAlert, ArrowRight, RefreshCw } from 'lucide-react'
-import { Html5QrcodeScanner } from 'html5-qrcode'
+import { Hexagon, QrCode, CheckCircle2, XCircle, UserCheck, ShieldAlert, ArrowRight, RefreshCw, Camera } from 'lucide-react'
+import { Html5Qrcode } from 'html5-qrcode'
 import { db } from '../../lib/firebase'
 import { doc, getDoc, updateDoc } from 'firebase/firestore'
 
@@ -12,41 +12,56 @@ export default function CheckInScanner() {
     const [scanError, setScanError] = useState<string | null>(null)
     const [isProcessing, setIsProcessing] = useState(false)
     const [checkInStatus, setCheckInStatus] = useState<'idle' | 'success' | 'already_checked_in'>('idle')
+    const scannerRef = useRef<Html5Qrcode | null>(null)
 
     useEffect(() => {
-        // Initialize the scanner when the component mounts
-        const scanner = new Html5QrcodeScanner(
-            "reader",
-            { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
-            false
-        )
+        // Initialize the raw camera engine
+        scannerRef.current = new Html5Qrcode("reader")
 
-        scanner.render(onScanSuccess, onScanFailure)
-
-        function onScanSuccess(decodedText: string) {
+        const startScanner = async () => {
             try {
-                // The QR code contains a URI-encoded JSON string
-                const payload = JSON.parse(decodeURIComponent(decodedText))
-
-                if (payload.code && payload.team && payload.track) {
-                    scanner.pause(true) // Pause scanning while we process
-                    setScanResult(payload)
-                    verifyAndCheckIn(payload.code)
-                } else {
-                    setScanError("Invalid QR format. Not a Hive Code.")
-                }
+                await scannerRef.current?.start(
+                    { facingMode: "environment" }, // Forces the back camera
+                    {
+                        fps: 10,
+                        qrbox: { width: 250, height: 250 },
+                        aspectRatio: 1.0
+                    },
+                    (decodedText) => {
+                        // ON SUCCESS
+                        try {
+                            const payload = JSON.parse(decodeURIComponent(decodedText))
+                            if (payload.code && payload.team && payload.track) {
+                                // Stop scanning immediately to prevent spam reading
+                                if (scannerRef.current?.isScanning) {
+                                    scannerRef.current.stop()
+                                }
+                                setScanResult(payload)
+                                verifyAndCheckIn(payload.code)
+                            } else {
+                                setScanError("Invalid format. Not a Hive Code.")
+                            }
+                        } catch (err) {
+                            setScanError("Unrecognized QR Code.")
+                        }
+                    },
+                    (error) => {
+                        // ON FAIL (Ignores empty frames)
+                    }
+                )
             } catch (err) {
-                setScanError("Unrecognized QR Code.")
+                console.error("Camera Start Error:", err)
+                setScanError("Camera blocked. Ensure you are using HTTPS or Localhost.")
             }
         }
 
-        function onScanFailure(error: any) {
-            // Fails constantly when no QR is in frame. We just ignore it.
-        }
+        startScanner()
 
-        // Cleanup on unmount
+        // Cleanup function to turn off camera when leaving page
         return () => {
-            scanner.clear().catch(console.error)
+            if (scannerRef.current?.isScanning) {
+                scannerRef.current.stop().catch(console.error)
+            }
         }
     }, [])
 
@@ -59,7 +74,7 @@ export default function CheckInScanner() {
             const teamSnap = await getDoc(teamRef)
 
             if (!teamSnap.exists()) {
-                setScanError("Team not found in the database!")
+                setScanError("Team not found in database!")
                 setCheckInStatus('idle')
                 setIsProcessing(false)
                 return
@@ -70,7 +85,6 @@ export default function CheckInScanner() {
             if (teamData.checkedIn) {
                 setCheckInStatus('already_checked_in')
             } else {
-                // Officially mark them as checked in!
                 await updateDoc(teamRef, { checkedIn: true, checkedInAt: new Date().toISOString() })
                 setCheckInStatus('success')
             }
@@ -86,8 +100,7 @@ export default function CheckInScanner() {
         setScanResult(null)
         setScanError(null)
         setCheckInStatus('idle')
-        // We have to reload the page to cleanly reset the html5-qrcode camera state
-        window.location.reload()
+        window.location.reload() // Safest way to completely re-mount the camera
     }
 
     return (
@@ -97,27 +110,27 @@ export default function CheckInScanner() {
             <div className="bg-stone-950 p-4 border-b border-stone-800 flex items-center justify-between shadow-md z-10 relative">
                 <div className="flex items-center gap-2">
                     <Hexagon className="w-6 h-6 text-yellow-500" fill="currentColor" />
-                    <span className="font-black tracking-tight text-lg uppercase text-white">Hive Access Terminal</span>
+                    <span className="font-black tracking-tight text-lg uppercase text-white">Access Terminal</span>
                 </div>
                 <div className="px-3 py-1 bg-red-500/20 border border-red-500/50 rounded-full flex items-center gap-1.5">
                     <ShieldAlert className="w-4 h-4 text-red-500" />
-                    <span className="text-[10px] font-black uppercase text-red-500 tracking-wider">Admin Only</span>
+                    <span className="text-[10px] font-black uppercase text-red-500 tracking-wider">Admin</span>
                 </div>
             </div>
 
             {/* SCANNER VIEWPORT */}
-            <div className="flex-1 flex flex-col relative">
+            <div className="flex-1 flex flex-col relative bg-black">
 
-                {/* The actual camera feed mounts inside this div */}
-                <div id="reader" className="w-full bg-black border-none [&>div]:border-none [&_video]:object-cover [&_video]:w-full [&_video]:h-[50vh]"></div>
+                {/* The raw camera feed mounts here. No ugly UI buttons. */}
+                <div id="reader" className="w-full h-[50vh] overflow-hidden"></div>
 
-                {/* OVERLAY & RESULTS (Covers the bottom half of the screen) */}
+                {/* OVERLAY & RESULTS */}
                 <div className="absolute bottom-0 left-0 w-full h-[50vh] bg-stone-900 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] border-t border-stone-700 p-6 flex flex-col z-20">
 
                     <AnimatePresence mode="wait">
                         {!scanResult && !scanError ? (
                             <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col items-center justify-center text-center">
-                                <QrCode className="w-16 h-16 text-stone-600 mb-4 animate-pulse" />
+                                <Camera className="w-16 h-16 text-stone-600 mb-4 animate-pulse" />
                                 <h2 className="text-xl font-black text-stone-300 uppercase tracking-widest mb-2">Awaiting Target</h2>
                                 <p className="text-sm font-medium text-stone-500">Position the hacker's Dashboard QR code inside the camera frame.</p>
                             </motion.div>
@@ -125,7 +138,7 @@ export default function CheckInScanner() {
                             <motion.div key="error" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex-1 flex flex-col items-center justify-center text-center">
                                 <XCircle className="w-16 h-16 text-red-500 mb-4" />
                                 <h2 className="text-xl font-black text-red-500 uppercase tracking-widest mb-2">Scan Failed</h2>
-                                <p className="text-sm font-medium text-stone-400 mb-6">{scanError}</p>
+                                <p className="text-sm font-medium text-stone-400 mb-6 px-4">{scanError}</p>
                                 <button onClick={resetScanner} className="px-8 py-4 bg-stone-800 text-white font-bold rounded-xl flex items-center gap-2 uppercase tracking-wider active:scale-95 transition-transform">
                                     <RefreshCw className="w-5 h-5" /> Retry Scan
                                 </button>
@@ -178,16 +191,6 @@ export default function CheckInScanner() {
 
                 </div>
             </div>
-
-            {/* Hides the ugly branding from the html5-qrcode library */}
-            {/* Hides the ugly branding from the html5-qrcode library */}
-            <style dangerouslySetInnerHTML={{
-                __html: `
-                #reader__dashboard_section_csr span { display: none !important; }
-                #reader__dashboard_section_swaplink { display: none !important; }
-                #reader button { background: #EAB308 !important; color: black !important; padding: 8px 16px !important; border-radius: 8px !important; font-weight: bold !important; text-transform: uppercase !important; margin-top: 10px !important; }
-                #reader a { display: none !important; }
-            `}} />
 
         </main>
     )
