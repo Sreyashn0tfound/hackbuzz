@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { Hexagon, ArrowLeft, Users, Terminal, DollarSign, Database, Activity, AlertTriangle, ShieldAlert, CheckCircle2, PlayCircle, PlusCircle, XCircle, Clock, RefreshCw, QrCode, Rocket } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Hexagon, ArrowLeft, Users, Terminal, DollarSign, Database, Activity, AlertTriangle, ShieldAlert, CheckCircle2, PlayCircle, PlusCircle, XCircle, Clock, RefreshCw, QrCode, Rocket, MessageSquareReply, Send } from 'lucide-react'
 import Link from 'next/link'
 import { db, auth, app } from '../../lib/firebase'
 import { collection, doc, updateDoc, onSnapshot, setDoc, arrayUnion } from 'firebase/firestore'
@@ -29,6 +29,10 @@ export default function AdminDashboard() {
     const [judgePass, setJudgePass] = useState('')
     const [judgeTrack, setJudgeTrack] = useState('Urban Friction')
     const [judgeAdded, setJudgeAdded] = useState(false)
+
+    // SOS Reply State
+    const [replyingTo, setReplyingTo] = useState<string | null>(null)
+    const [replyMessage, setReplyMessage] = useState('')
 
     useEffect(() => {
         // REAL-TIME: Master Config & Clock
@@ -110,8 +114,21 @@ export default function AdminDashboard() {
         }
     }
 
-    const resolveSos = async (id: string) => {
-        await updateDoc(doc(db, "sos_tickets", id), { status: 'resolved' })
+    // SOS REPLY & RESOLVE
+    const resolveSos = async (id: string, withReply: boolean = false) => {
+        try {
+            const payload: any = { status: 'resolved' }
+            if (withReply && replyMessage.trim() !== '') {
+                payload.adminReply = replyMessage
+            }
+            await updateDoc(doc(db, "sos_tickets", id), payload)
+
+            // Clean up state
+            setReplyingTo(null)
+            setReplyMessage('')
+        } catch (error) {
+            alert("Failed to resolve ticket.")
+        }
     }
 
     const toggleEventStatus = async () => {
@@ -211,7 +228,7 @@ export default function AdminDashboard() {
                         </div>
                     </div>
 
-                    {/* NEW: THE 24 HOUR CLOCK BLOCK */}
+                    {/* THE 24 HOUR CLOCK BLOCK */}
                     <div className="bg-stone-900 border border-stone-800 p-6 rounded-3xl shadow-lg flex flex-col justify-center items-center text-center relative overflow-hidden">
                         <div className="absolute top-0 left-0 w-full h-1.5 bg-yellow-400" />
                         <p className="text-xs font-black text-stone-400 uppercase tracking-widest mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Event Timer</p>
@@ -260,7 +277,7 @@ export default function AdminDashboard() {
                             </div>
                         )}
 
-                        {/* MASTER ROSTER (UPGRADED WITH STATUS PILLS) */}
+                        {/* MASTER ROSTER */}
                         <div className="bg-white border shadow-sm rounded-3xl overflow-hidden relative">
                             <div className="absolute top-0 left-0 w-full h-1.5 bg-stone-900" />
                             <div className="p-6 border-b border-stone-100 flex justify-between items-center">
@@ -362,8 +379,8 @@ export default function AdminDashboard() {
                             </form>
                         </div>
 
-                        {/* LIVE SOS FEED */}
-                        <div className="bg-white border shadow-sm rounded-3xl flex flex-col h-[400px] relative overflow-hidden">
+                        {/* LIVE SOS FEED WITH REPLY */}
+                        <div className="bg-white border shadow-sm rounded-3xl flex flex-col h-[500px] relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-1.5 bg-red-500" />
                             <div className="p-6 border-b border-stone-100 flex items-center gap-2">
                                 <AlertTriangle className="w-5 h-5 text-red-500" />
@@ -380,8 +397,29 @@ export default function AdminDashboard() {
                                                 <span className="text-xs font-bold text-stone-400">{new Date(ticket.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                             </div>
                                             <h4 className="font-black text-sm mb-1">{ticket.teamName}</h4>
-                                            <p className="text-sm font-medium text-stone-600 mb-3">{ticket.message}</p>
-                                            <button onClick={() => resolveSos(ticket.id)} className="w-full py-2 bg-stone-100 hover:bg-green-100 hover:text-green-700 text-stone-600 text-xs font-black uppercase rounded-lg transition-colors">Mark Resolved</button>
+                                            <p className="text-sm font-medium text-stone-600 mb-4">{ticket.message}</p>
+
+                                            {/* REPLY UI */}
+                                            {replyingTo === ticket.id ? (
+                                                <div className="mt-2 space-y-2">
+                                                    <input
+                                                        type="text"
+                                                        value={replyMessage}
+                                                        onChange={(e) => setReplyMessage(e.target.value)}
+                                                        placeholder="Type response..."
+                                                        className="w-full p-2 text-sm border rounded-lg outline-none focus:border-stone-400"
+                                                    />
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => setReplyingTo(null)} className="flex-1 py-1.5 bg-stone-100 text-stone-600 text-xs font-bold uppercase rounded-md hover:bg-stone-200">Cancel</button>
+                                                        <button onClick={() => resolveSos(ticket.id, true)} className="flex-1 py-1.5 bg-stone-900 text-white text-xs font-bold uppercase rounded-md hover:bg-stone-800 flex items-center justify-center gap-1"><Send className="w-3 h-3" /> Send</button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => resolveSos(ticket.id)} className="flex-1 py-2 bg-stone-100 hover:bg-green-100 hover:text-green-700 text-stone-600 text-xs font-black uppercase rounded-lg transition-colors">Mark Resolved</button>
+                                                    <button onClick={() => setReplyingTo(ticket.id)} className="flex-1 py-2 bg-stone-100 hover:bg-stone-200 text-stone-900 text-xs font-black uppercase rounded-lg transition-colors flex justify-center items-center gap-1"><MessageSquareReply className="w-3 h-3" /> Reply</button>
+                                                </div>
+                                            )}
                                         </div>
                                     ))
                                 )}

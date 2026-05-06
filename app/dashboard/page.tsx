@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Hexagon, ArrowLeft, ArrowRight, Terminal, Users, Cpu, Clock, Rocket, Bell, Code, Link as LinkIcon, CheckCircle2, Headset, Send, Crown, AlertCircle, XCircle, FileText, Layers, Bot, Video, Dices, Lock, Building2, GraduationCap, HeartPulse, Wallet, Network, MonitorOff, Unlock, Activity, QrCode } from 'lucide-react'
+import { Hexagon, ArrowLeft, ArrowRight, Terminal, Users, Cpu, Clock, Rocket, Bell, Code, Link as LinkIcon, CheckCircle2, Headset, Send, Crown, AlertCircle, XCircle, FileText, Layers, Bot, Video, Dices, Lock, Building2, GraduationCap, HeartPulse, Wallet, Network, MonitorOff, Unlock, Activity, QrCode, MessageSquareReply } from 'lucide-react'
 import Link from 'next/link'
 import { auth, db } from '../../lib/firebase'
-import { doc, getDoc, updateDoc, onSnapshot, addDoc, collection, arrayRemove } from 'firebase/firestore'
+import { doc, getDoc, updateDoc, onSnapshot, addDoc, collection, arrayRemove, query, where } from 'firebase/firestore'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { useRouter } from 'next/navigation'
 
@@ -53,6 +53,7 @@ export default function HackerDashboard() {
     const [sosType, setSosType] = useState<'Mentor' | 'Tech' | 'Facilities'>('Mentor')
     const [sosMessage, setSosMessage] = useState('')
     const [isSosSent, setIsSosSent] = useState(false)
+    const [mySosTickets, setMySosTickets] = useState<any[]>([]) // NEW: Stores hackers own tickets
 
     // Gambling/Roulette States
     const [isSpinning, setIsSpinning] = useState(false)
@@ -101,6 +102,21 @@ export default function HackerDashboard() {
 
         return () => unsubscribe()
     }, [router])
+
+    // NEW: LISTEN FOR HACKER'S OWN SOS TICKETS
+    useEffect(() => {
+        if (!teamCode) return;
+
+        const q = query(collection(db, "sos_tickets"), where("teamId", "==", teamCode))
+        const unsubMySos = onSnapshot(q, (snap) => {
+            const tickets: any[] = []
+            snap.forEach(doc => tickets.push({ id: doc.id, ...doc.data() }))
+            // Sort so newest is at the top
+            setMySosTickets(tickets.sort((a, b) => b.timestamp - a.timestamp))
+        })
+        return () => unsubMySos()
+    }, [teamCode])
+
 
     // LISTEN FOR ADMIN MASTER LOCKS & CLOCK
     useEffect(() => {
@@ -426,6 +442,38 @@ export default function HackerDashboard() {
                                     </button>
                                 </form>
                             )}
+
+                            {/* NEW: RESOLVED/REPLIED TICKETS LOG */}
+                            {mySosTickets.length > 0 && (
+                                <div className="mt-8 pt-6 border-t border-stone-200/50">
+                                    <h4 className="font-bold text-xs text-stone-500 uppercase tracking-widest mb-4">Recent Beacon Logs</h4>
+                                    <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
+                                        {mySosTickets.map(ticket => (
+                                            <div key={ticket.id} className="p-3 bg-white/50 border border-stone-200 rounded-xl">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-[10px] font-black uppercase text-stone-400">{ticket.type}</span>
+                                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${ticket.status === 'resolved' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                        {ticket.status}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm font-medium text-stone-800 mb-2">"{ticket.message}"</p>
+
+                                                {/* If Admin replied, show it here! */}
+                                                {ticket.adminReply && (
+                                                    <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded-lg flex gap-2">
+                                                        <MessageSquareReply className="w-4 h-4 text-yellow-600 shrink-0 mt-0.5" />
+                                                        <div>
+                                                            <span className="block text-[10px] font-black text-yellow-800 uppercase tracking-wider mb-0.5">Admin Response</span>
+                                                            <p className="text-xs font-bold text-stone-900">{ticket.adminReply}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                         </motion.div>
 
                     </div>
