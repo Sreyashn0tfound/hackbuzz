@@ -268,17 +268,17 @@ export default function RegisterPage() {
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <button
-                                            disabled={totalTeamsCount >= 36}
-                                            onClick={() => { if (totalTeamsCount < 36) { setFlow('create'); setStep(1) } }}
-                                            className={`group relative p-8 backdrop-blur-sm border rounded-3xl transition-all text-left overflow-hidden ${totalTeamsCount >= 36 ? 'bg-stone-100 border-stone-200 opacity-60 cursor-not-allowed' : 'bg-white/50 border-white/60 hover:bg-white/80 hover:shadow-xl hover:-translate-y-1'}`}
+                                            disabled={totalTeamsCount >= 30}
+                                            onClick={() => { if (totalTeamsCount < 30) { setFlow('create'); setStep(1) } }}
+                                            className={`group relative p-8 backdrop-blur-sm border rounded-3xl transition-all text-left overflow-hidden ${totalTeamsCount >= 30 ? 'bg-stone-100 border-stone-200 opacity-60 cursor-not-allowed' : 'bg-white/50 border-white/60 hover:bg-white/80 hover:shadow-xl hover:-translate-y-1'}`}
                                         >
                                             <div className="absolute top-0 left-0 w-1.5 h-full bg-yellow-400 scale-y-0 group-hover:scale-y-100 transition-transform origin-top" />
-                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 border transition-transform ${totalTeamsCount >= 36 ? 'bg-stone-200 border-stone-300' : 'bg-gradient-to-br from-yellow-100 to-yellow-200 border-yellow-300 group-hover:scale-110'}`}>
-                                                <UserPlus className={`w-7 h-7 ${totalTeamsCount >= 36 ? 'text-stone-400' : 'text-yellow-600'}`} />
+                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 border transition-transform ${totalTeamsCount >= 30 ? 'bg-stone-200 border-stone-300' : 'bg-gradient-to-br from-yellow-100 to-yellow-200 border-yellow-300 group-hover:scale-110'}`}>
+                                                <UserPlus className={`w-7 h-7 ${totalTeamsCount >= 30 ? 'text-stone-400' : 'text-yellow-600'}`} />
                                             </div>
-                                            <h2 className={`text-2xl font-black uppercase mb-2 ${totalTeamsCount >= 36 ? 'text-stone-500' : 'text-stone-900'}`}>Create Team</h2>
+                                            <h2 className={`text-2xl font-black uppercase mb-2 ${totalTeamsCount >= 30 ? 'text-stone-500' : 'text-stone-900'}`}>Create Team</h2>
                                             <p className="text-stone-500 font-medium text-sm">
-                                                {totalTeamsCount >= 36 ? 'Registration Full. Maximum 36 teams reached.' : 'Pick your track and generate a secure invite code for your squad. Tracks are strictly First-Come, First-Serve!'}
+                                                {totalTeamsCount >= 30 ? 'Registration Full. Maximum 30 teams reached.' : 'Pick your track and generate a secure invite code for your squad. Tracks are strictly First-Come, First-Serve!'}
                                             </p>
                                         </button>
 
@@ -296,7 +296,7 @@ export default function RegisterPage() {
                             {flow === 'create' && step === 1 && (
                                 <motion.div key="create" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                                     <h1 className="text-3xl font-black text-stone-900 uppercase tracking-tight mb-2">Establish Squad</h1>
-                                    <p className="text-stone-500 font-medium mb-6">Set your team name and target sector to initialize the database.</p>
+                                    <p className="text-stone-500 font-medium mb-6">Set your team name and target sector to initialize the database. (Max 5 teams per track)</p>
 
                                     {/* FIRST COME FIRST SERVE WARNING */}
                                     <div className="bg-yellow-100 border border-yellow-300 p-4 rounded-2xl mb-8 flex items-start gap-3 shadow-sm">
@@ -304,7 +304,7 @@ export default function RegisterPage() {
                                         <div>
                                             <h3 className="font-black text-yellow-800 uppercase tracking-wide text-sm mb-1">⚠️ First-Come, First-Serve</h3>
                                             <p className="text-yellow-700 text-xs font-bold leading-relaxed">
-                                                Each theme is strictly capped at a maximum of 6 teams. Once a track hits its capacity, it will be locked and permanently disabled. Move fast.
+                                                Each theme is strictly capped at a maximum of 5 teams. Once a track hits its capacity, it will be locked and permanently disabled. Move fast.
                                             </p>
                                         </div>
                                     </div>
@@ -320,7 +320,7 @@ export default function RegisterPage() {
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                 {tracks.map((track) => {
                                                     const count = trackCounts[track.id] || 0;
-                                                    const isFull = count >= 6; // Locks it out instantly at 6 teams
+                                                    const isFull = count >= 5; // Locks it out instantly at 5 teams
 
                                                     return (
                                                         <div
