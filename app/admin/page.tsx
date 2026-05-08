@@ -2,12 +2,21 @@
 
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Hexagon, ArrowLeft, Users, Terminal, DollarSign, Database, Activity, AlertTriangle, ShieldAlert, CheckCircle2, PlayCircle, PlusCircle, XCircle, Clock, RefreshCw, QrCode, Rocket, MessageSquareReply, Send } from 'lucide-react'
+import { Hexagon, ArrowLeft, Users, Terminal, DollarSign, Database, Activity, AlertTriangle, ShieldAlert, CheckCircle2, PlayCircle, PlusCircle, XCircle, Clock, RefreshCw, QrCode, Rocket, MessageSquareReply, Send, Crosshair, Trophy } from 'lucide-react'
 import Link from 'next/link'
 import { db, auth, app } from '../../lib/firebase'
-import { collection, doc, updateDoc, onSnapshot, setDoc, arrayUnion } from 'firebase/firestore'
+import { collection, doc, updateDoc, onSnapshot, setDoc, arrayUnion, getDoc, arrayRemove } from 'firebase/firestore'
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth'
 import { initializeApp, getApps } from 'firebase/app'
+
+const TRACKS = [
+    'Urban Friction',
+    'Learning Under Constraint',
+    'Health in the Margins',
+    'Money at the Edge',
+    'Broken Handoffs',
+    'Digital Overload'
+]
 
 export default function AdminDashboard() {
     const [qForm, setQForm] = useState({ title: '', description: '', constraints: '', output: '' })
@@ -154,6 +163,47 @@ export default function AdminDashboard() {
         }
     }
 
+    // FORCE ASSIGN QUESTION LOGIC
+    const handleForceAssign = async (teamId: string, track: string) => {
+        try {
+            const qDoc = await getDoc(doc(db, "track_questions", track))
+
+            if (!qDoc.exists() || !qDoc.data().pool || qDoc.data().pool.length === 0) {
+                alert("No questions available in the vault for the " + track + " track.")
+                return
+            }
+
+            const pool = qDoc.data().pool
+
+            let promptText = `Select an objective to FORCE ASSIGN to this team.\nEnter the number:\n\n`
+            pool.forEach((q: any, idx: number) => {
+                const title = typeof q === 'string' ? q : q.title
+                promptText += `${idx + 1}. ${title}\n`
+            })
+
+            const choice = prompt(promptText)
+            if (!choice) return
+
+            const selectedIdx = parseInt(choice) - 1
+            if (isNaN(selectedIdx) || selectedIdx < 0 || selectedIdx >= pool.length) {
+                alert("Invalid selection.")
+                return
+            }
+
+            const finalQuestion = pool[selectedIdx]
+            const finalTitle = typeof finalQuestion === 'string' ? finalQuestion : finalQuestion.title
+
+            if (confirm(`Are you absolutely sure you want to force assign:\n\n"${finalTitle}" ?\n\nThis will lock it to their dashboard immediately.`)) {
+                await updateDoc(doc(db, "teams", teamId), { assignedQuestion: finalQuestion })
+                await updateDoc(doc(db, "track_questions", track), { pool: arrayRemove(finalQuestion) })
+                alert("Objective force-assigned successfully!")
+            }
+        } catch (error) {
+            console.error(error)
+            alert("Failed to force assign objective.")
+        }
+    }
+
     const handleAddJudge = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
@@ -182,6 +232,13 @@ export default function AdminDashboard() {
             alert(`Structured Objective locked into the vault for ${qTrack}!`)
         } catch (err) { alert("Failed to add question.") }
     }
+
+    // AUTOMATICALLY CALCULATE TOP 2 TEAMS PER THEME
+    const topTeamsByTrack = TRACKS.map(track => {
+        const trackTeams = teams.filter(t => t.track === track && t.isScored);
+        const sorted = trackTeams.sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0)).slice(0, 2);
+        return { track, teams: sorted };
+    }).filter(group => group.teams.length > 0);
 
     return (
         <main className="relative min-h-screen bg-[#FAFAFA] text-stone-900 py-12 px-6">
@@ -249,7 +306,7 @@ export default function AdminDashboard() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                    {/* LEFT COL: Verification & Roster */}
+                    {/* LEFT COL: Verification, Roster & LEADERBOARD */}
                     <div className="lg:col-span-2 space-y-6">
 
                         {/* PENDING VERIFICATION QUEUE */}
@@ -277,6 +334,42 @@ export default function AdminDashboard() {
                             </div>
                         )}
 
+                        {/* NEW: DYNAMIC LEADERBOARD BY TRACK */}
+                        {topTeamsByTrack.length > 0 && (
+                            <div className="bg-white border shadow-sm rounded-3xl p-6 relative overflow-hidden">
+                                <div className="absolute top-0 left-0 w-full h-1.5 bg-yellow-400" />
+                                <div className="flex items-center gap-3 mb-6 border-b border-stone-100 pb-4">
+                                    <Trophy className="w-6 h-6 text-yellow-500" />
+                                    <h3 className="font-black text-xl uppercase text-stone-900">Current Leaders by Theme</h3>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {topTeamsByTrack.map(group => (
+                                        <div key={group.track} className="bg-stone-50 border border-stone-200 rounded-2xl p-4 shadow-sm">
+                                            <h4 className="font-black text-stone-400 uppercase text-xs tracking-widest mb-3">{group.track}</h4>
+                                            <div className="space-y-3">
+                                                {group.teams.map((t, idx) => (
+                                                    <div key={t.id} className={`flex items-center justify-between p-3 rounded-xl border ${idx === 0 ? 'bg-gradient-to-r from-yellow-50 to-amber-50 border-yellow-200 shadow-sm' : 'bg-white border-stone-100'}`}>
+                                                        <div className="flex items-center gap-3 overflow-hidden">
+                                                            <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-black text-sm ${idx === 0 ? 'bg-yellow-400 text-stone-900' : 'bg-stone-200 text-stone-500'}`}>
+                                                                #{idx + 1}
+                                                            </div>
+                                                            <div className="overflow-hidden">
+                                                                <h5 className="font-black text-stone-900 text-sm truncate w-32 md:w-40">{t.teamName}</h5>
+                                                                <p className="text-[10px] font-bold text-stone-500 uppercase truncate w-32 md:w-40">{t.project?.name || 'No Artifact'}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-xl font-black text-stone-900 shrink-0 bg-white px-2 py-1 rounded-lg border border-stone-100 shadow-sm">
+                                                            {t.totalScore}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {/* MASTER ROSTER */}
                         <div className="bg-white border shadow-sm rounded-3xl overflow-hidden relative">
                             <div className="absolute top-0 left-0 w-full h-1.5 bg-stone-900" />
@@ -287,13 +380,14 @@ export default function AdminDashboard() {
                                 </Link>
                             </div>
                             <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse min-w-[800px]">
+                                <table className="w-full text-left border-collapse min-w-[900px]">
                                     <thead>
                                         <tr className="bg-stone-50">
-                                            <th className="p-4 font-bold text-stone-500 text-xs uppercase w-[25%]">Team</th>
+                                            <th className="p-4 font-bold text-stone-500 text-xs uppercase w-[20%]">Team</th>
                                             <th className="p-4 font-bold text-stone-500 text-xs uppercase w-[20%]">Status</th>
-                                            <th className="p-4 font-bold text-stone-500 text-xs uppercase w-[40%]">Gacha Question</th>
-                                            <th className="p-4 font-bold text-stone-500 text-xs uppercase text-right w-[15%]">Actions</th>
+                                            <th className="p-4 font-bold text-stone-500 text-xs uppercase w-[30%]">Gacha Question</th>
+                                            <th className="p-4 font-bold text-stone-500 text-xs uppercase text-center w-[10%]">Score</th>
+                                            <th className="p-4 font-bold text-stone-500 text-xs uppercase text-right w-[20%]">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-stone-100">
@@ -320,8 +414,28 @@ export default function AdminDashboard() {
                                                 <td className="p-4 text-sm font-medium text-stone-600 max-w-[200px] truncate">
                                                     {team.assignedQuestion ? (team.assignedQuestion.title || team.assignedQuestion) : "Not Spun Yet"}
                                                 </td>
+
+                                                {/* NEW SCORE DATA IN TABLE */}
+                                                <td className="p-4 text-center">
+                                                    {team.isScored ? (
+                                                        <div className="inline-flex items-center justify-center w-10 h-10 bg-yellow-100 text-yellow-700 font-black rounded-xl border border-yellow-200 shadow-sm">
+                                                            {team.totalScore}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-stone-300 font-bold">-</span>
+                                                    )}
+                                                </td>
+
                                                 <td className="p-4 text-right">
-                                                    <button onClick={() => handleTransferCaptain(team.id)} className="px-3 py-1.5 bg-stone-900 text-yellow-400 font-bold text-[10px] uppercase rounded-lg hover:bg-stone-800 transition-colors">Transfer Captain</button>
+                                                    <div className="flex flex-col gap-2 items-end">
+                                                        <button onClick={() => handleTransferCaptain(team.id)} className="px-3 py-1.5 bg-stone-100 text-stone-600 font-bold text-[10px] uppercase rounded-lg hover:bg-stone-200 transition-colors w-full text-center">Transfer Captain</button>
+
+                                                        {!team.assignedQuestion && (
+                                                            <button onClick={() => handleForceAssign(team.id, team.track)} className="px-3 py-1.5 bg-purple-100 text-purple-700 font-bold text-[10px] uppercase rounded-lg hover:bg-purple-200 transition-colors flex items-center justify-center gap-1 w-full">
+                                                                <Crosshair className="w-3 h-3" /> Force Assign
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}

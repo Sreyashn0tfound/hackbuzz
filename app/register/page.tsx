@@ -66,9 +66,6 @@ function CyberHiveMesh() {
     )
 }
 
-// ==========================================
-// 2. DOM EFFECTS
-// ==========================================
 function LiquidAuraBackground() {
     return (
         <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden bg-[#FAFAFA]">
@@ -105,16 +102,12 @@ const tracks = [
     { id: 'Digital Overload', name: "Digital Overload", icon: MonitorOff, color: "text-cyan-500", bg: "bg-cyan-50", desc: "Design solutions for subtraction: compressing newsletters, auditing meetings, and tool sprawl." },
 ]
 
-// ==========================================
-// 3. MAIN REGISTRATION COMPONENT
-// ==========================================
 export default function RegisterPage() {
     const [flow, setFlow] = useState<'none' | 'create' | 'join'>('none')
     const [step, setStep] = useState(1)
     const [isDesktop, setIsDesktop] = useState(true)
     const [showInstructions, setShowInstructions] = useState(false)
 
-    // Form & Database State
     const [teamCode, setTeamCode] = useState('')
     const [teamName, setTeamName] = useState('')
     const [selectedTrack, setSelectedTrack] = useState('')
@@ -122,38 +115,11 @@ export default function RegisterPage() {
     const [generatedCode, setGeneratedCode] = useState('')
     const [isProcessing, setIsProcessing] = useState(false)
 
-    // Track Capacity & Total Limits
-    const [trackCounts, setTrackCounts] = useState<Record<string, number>>({})
-    const [totalTeamsCount, setTotalTeamsCount] = useState(0)
-
     useEffect(() => {
         const checkMobile = () => setIsDesktop(window.innerWidth > 768)
         checkMobile()
         window.addEventListener('resize', checkMobile)
         return () => window.removeEventListener('resize', checkMobile)
-    }, [])
-
-    useEffect(() => {
-        const fetchTrackData = async () => {
-            try {
-                const snap = await getDocs(collection(db, "teams"));
-                const counts: Record<string, number> = {};
-                let total = 0;
-                snap.forEach(doc => {
-                    const trackId = doc.data().track;
-                    counts[trackId] = (counts[trackId] || 0) + 1;
-                    total++;
-                });
-                setTrackCounts(counts);
-                setTotalTeamsCount(total);
-            } catch (error) {
-                console.error("Failed to load track capacities", error);
-            }
-        };
-        fetchTrackData();
-
-        // Pre-fill email
-
     }, [])
 
     const handleRegistration = async () => {
@@ -170,7 +136,7 @@ export default function RegisterPage() {
                     track: selectedTrack,
                     members: [personalDetails],
                     createdAt: new Date().toISOString(),
-                    status: 'approved', // Auto-Approved instantly!
+                    status: 'approved',
                     leaderUid: auth.currentUser?.uid || ""
                 })
             } else if (flow === 'join') {
@@ -200,11 +166,9 @@ export default function RegisterPage() {
                 await setDoc(doc(db, "users", auth.currentUser.uid), {
                     teamCode: finalCode
                 }, { merge: true })
-            } else {
-                console.error("CRITICAL: User lost auth state during registration.")
             }
 
-            setStep(3) // Straight to the Success Page!
+            setStep(3)
         } catch (error) {
             console.error(error)
             alert("Hive connection failed!")
@@ -218,7 +182,6 @@ export default function RegisterPage() {
         <main className="relative min-h-screen text-stone-900 py-12 px-6 overflow-hidden">
             <LiquidAuraBackground />
 
-            {/* 3D Canvas Background */}
             {isDesktop && (
                 <div className="fixed inset-0 z-0 pointer-events-none opacity-80">
                     <Canvas camera={{ position: [0, 0, 8], fov: 45 }}>
@@ -233,7 +196,6 @@ export default function RegisterPage() {
                 </div>
             )}
 
-            {/* TOP NAVIGATION & HELP BUTTON */}
             <div className="max-w-4xl mx-auto flex justify-between items-center mb-12 relative z-20">
                 <Link href="/" className="flex items-center gap-2 px-6 py-3 bg-white/70 backdrop-blur-md border border-white/50 rounded-full text-stone-600 font-bold hover:bg-white hover:shadow-lg hover:text-stone-900 transition-all">
                     <ArrowLeft className="w-5 h-5" /> Base
@@ -258,7 +220,7 @@ export default function RegisterPage() {
                     <div className="p-8 md:p-12 relative z-10 bg-white/40 rounded-[2rem]">
                         <AnimatePresence mode="wait">
 
-                            {/* STEP 0: FORK IN THE ROAD */}
+                            {/* STEP 0: FORK IN THE ROAD (LIMITS REMOVED) */}
                             {flow === 'none' && (
                                 <motion.div key="fork" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }}>
                                     <div className="mb-10 text-center">
@@ -268,17 +230,16 @@ export default function RegisterPage() {
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <button
-                                            disabled={totalTeamsCount >= 30}
-                                            onClick={() => { if (totalTeamsCount < 30) { setFlow('create'); setStep(1) } }}
-                                            className={`group relative p-8 backdrop-blur-sm border rounded-3xl transition-all text-left overflow-hidden ${totalTeamsCount >= 30 ? 'bg-stone-100 border-stone-200 opacity-60 cursor-not-allowed' : 'bg-white/50 border-white/60 hover:bg-white/80 hover:shadow-xl hover:-translate-y-1'}`}
+                                            onClick={() => { setFlow('create'); setStep(1) }}
+                                            className={`group relative p-8 backdrop-blur-sm border rounded-3xl transition-all text-left overflow-hidden bg-white/50 border-white/60 hover:bg-white/80 hover:shadow-xl hover:-translate-y-1`}
                                         >
                                             <div className="absolute top-0 left-0 w-1.5 h-full bg-yellow-400 scale-y-0 group-hover:scale-y-100 transition-transform origin-top" />
-                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 border transition-transform ${totalTeamsCount >= 30 ? 'bg-stone-200 border-stone-300' : 'bg-gradient-to-br from-yellow-100 to-yellow-200 border-yellow-300 group-hover:scale-110'}`}>
-                                                <UserPlus className={`w-7 h-7 ${totalTeamsCount >= 30 ? 'text-stone-400' : 'text-yellow-600'}`} />
+                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 border transition-transform bg-gradient-to-br from-yellow-100 to-yellow-200 border-yellow-300 group-hover:scale-110`}>
+                                                <UserPlus className={`w-7 h-7 text-yellow-600`} />
                                             </div>
-                                            <h2 className={`text-2xl font-black uppercase mb-2 ${totalTeamsCount >= 30 ? 'text-stone-500' : 'text-stone-900'}`}>Create Team</h2>
+                                            <h2 className={`text-2xl font-black uppercase mb-2 text-stone-900`}>Create Team</h2>
                                             <p className="text-stone-500 font-medium text-sm">
-                                                {totalTeamsCount >= 30 ? 'Registration Full. Maximum 30 teams reached.' : 'Pick your track and generate a secure invite code for your squad. Tracks are strictly First-Come, First-Serve!'}
+                                                Pick your track and generate a secure invite code for your squad.
                                             </p>
                                         </button>
 
@@ -292,22 +253,11 @@ export default function RegisterPage() {
                                 </motion.div>
                             )}
 
-                            {/* STEP 1A: CREATE TEAM */}
+                            {/* STEP 1A: CREATE TEAM (TRACK LIMITS REMOVED) */}
                             {flow === 'create' && step === 1 && (
                                 <motion.div key="create" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                                     <h1 className="text-3xl font-black text-stone-900 uppercase tracking-tight mb-2">Establish Squad</h1>
-                                    <p className="text-stone-500 font-medium mb-6">Set your team name and target sector to initialize the database. (Max 5 teams per track)</p>
-
-                                    {/* FIRST COME FIRST SERVE WARNING */}
-                                    <div className="bg-yellow-100 border border-yellow-300 p-4 rounded-2xl mb-8 flex items-start gap-3 shadow-sm">
-                                        <Clock className="w-6 h-6 text-yellow-600 shrink-0 mt-0.5" />
-                                        <div>
-                                            <h3 className="font-black text-yellow-800 uppercase tracking-wide text-sm mb-1">⚠️ First-Come, First-Serve</h3>
-                                            <p className="text-yellow-700 text-xs font-bold leading-relaxed">
-                                                Each theme is strictly capped at a maximum of 5 teams. Once a track hits its capacity, it will be locked and permanently disabled. Move fast.
-                                            </p>
-                                        </div>
-                                    </div>
+                                    <p className="text-stone-500 font-medium mb-6">Set your team name and target sector to initialize the database.</p>
 
                                     <div className="space-y-8">
                                         <div>
@@ -319,34 +269,26 @@ export default function RegisterPage() {
                                             <label className="block text-sm font-bold text-stone-500 uppercase mb-3 tracking-wider">Select Theme</label>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                 {tracks.map((track) => {
-                                                    const count = trackCounts[track.id] || 0;
-                                                    const isFull = count >= 5; // Locks it out instantly at 5 teams
-
                                                     return (
                                                         <div
                                                             key={track.id}
-                                                            onClick={() => !isFull && setSelectedTrack(track.id)}
-                                                            className={`relative overflow-hidden border p-4 rounded-2xl flex flex-col justify-center transition-all ${isFull
-                                                                ? 'bg-stone-100 border-stone-200 opacity-60 cursor-not-allowed grayscale'
-                                                                : selectedTrack === track.id
-                                                                    ? 'cursor-pointer border-yellow-400 bg-white shadow-md'
-                                                                    : 'cursor-pointer border-white/60 bg-white/40 hover:bg-white/80 hover:border-stone-200'
+                                                            onClick={() => setSelectedTrack(track.id)}
+                                                            className={`relative overflow-hidden border p-4 rounded-2xl flex flex-col justify-center transition-all ${selectedTrack === track.id
+                                                                ? 'cursor-pointer border-yellow-400 bg-white shadow-md'
+                                                                : 'cursor-pointer border-white/60 bg-white/40 hover:bg-white/80 hover:border-stone-200'
                                                                 }`}
                                                         >
-                                                            {selectedTrack === track.id && !isFull && <div className="absolute left-0 top-0 w-1 h-full bg-yellow-400" />}
+                                                            {selectedTrack === track.id && <div className="absolute left-0 top-0 w-1 h-full bg-yellow-400" />}
 
                                                             <div className="flex items-center justify-between w-full">
                                                                 <div className="flex items-center gap-3">
-                                                                    <div className={`p-3 rounded-xl ${isFull ? 'bg-stone-300' : track.bg}`}>
-                                                                        <track.icon className={`w-6 h-6 ${isFull ? 'text-stone-500' : track.color}`} />
+                                                                    <div className={`p-3 rounded-xl ${track.bg}`}>
+                                                                        <track.icon className={`w-6 h-6 ${track.color}`} />
                                                                     </div>
-                                                                    <span className={`font-bold ${isFull ? 'text-stone-500 line-through' : selectedTrack === track.id ? 'text-stone-900' : 'text-stone-600'}`}>
+                                                                    <span className={`font-bold ${selectedTrack === track.id ? 'text-stone-900' : 'text-stone-600'}`}>
                                                                         {track.name}
                                                                     </span>
                                                                 </div>
-                                                                {isFull && (
-                                                                    <span className="text-[10px] font-black uppercase bg-stone-300 text-stone-600 px-2 py-1 rounded-md tracking-wider">Filled</span>
-                                                                )}
                                                             </div>
                                                         </div>
                                                     )
@@ -493,52 +435,6 @@ export default function RegisterPage() {
                     <HoneyDrips />
                 </motion.div>
             </div>
-
-            {/* INSTRUCTIONS MODAL */}
-            <AnimatePresence>
-                {showInstructions && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-sm">
-                        <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} className="bg-white rounded-3xl p-8 max-w-md w-full relative">
-                            <button onClick={() => setShowInstructions(false)} className="absolute top-6 right-6 p-2 bg-stone-100 rounded-full hover:bg-stone-200 transition-colors">
-                                <X className="w-5 h-5 text-stone-600" />
-                            </button>
-
-                            <h2 className="text-2xl font-black text-stone-900 uppercase tracking-tight mb-6 flex items-center gap-2">
-                                <HelpCircle className="w-6 h-6 text-yellow-500" /> How to Register
-                            </h2>
-
-                            <div className="space-y-6">
-                                <div className="flex gap-4">
-                                    <div className="w-8 h-8 rounded-full bg-stone-900 text-yellow-400 flex items-center justify-center font-black shrink-0">1</div>
-                                    <div>
-                                        <h3 className="font-bold text-stone-900">Captain Creates Team</h3>
-                                        <p className="text-sm text-stone-500">One person acts as the captain. They pick the track and fill out their details to generate an invite code. Tracks are First-Come, First-Serve!</p>
-                                    </div>
-                                </div>
-                                <div className="flex gap-4">
-                                    <div className="w-8 h-8 rounded-full bg-stone-900 text-yellow-400 flex items-center justify-center font-black shrink-0">2</div>
-                                    <div>
-                                        <h3 className="font-bold text-stone-900">Share the Code</h3>
-                                        <p className="text-sm text-stone-500">The Captain receives a 6-digit Hive Code (e.g., HV-A9X2). Send this to your teammates.</p>
-                                    </div>
-                                </div>
-                                <div className="flex gap-4">
-                                    <div className="w-8 h-8 rounded-full bg-stone-900 text-yellow-400 flex items-center justify-center font-black shrink-0">3</div>
-                                    <div>
-                                        <h3 className="font-bold text-stone-900">Hackers Join</h3>
-                                        <p className="text-sm text-stone-500">Teammates click "Join Team", enter the code, and are instantly added to the roster.</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <button onClick={() => setShowInstructions(false)} className="w-full mt-8 py-4 bg-yellow-400 text-stone-900 font-black rounded-xl hover:bg-yellow-500 transition-colors">
-                                Got it
-                            </button>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
         </main>
     )
 }
